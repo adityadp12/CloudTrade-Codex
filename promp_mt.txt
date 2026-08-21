@@ -1,0 +1,12 @@
+
+
+
+Tolong buat clone mt5 bisa berjalan dan sudah login
+seperti yang saat ini sudah berjalan dan terbuka full config sama persis .
+file mt5 ada di folder
+D:\MetaTrader 5 BTC\MetaTrader 5
+
+yang bisa kamu clone di folder HM
+
+kemudian akses login demo ada di file CloudTrade/login.txt
+semua step nya kamu rekam jadikan promp nanti nya akan digunakan jadi core system

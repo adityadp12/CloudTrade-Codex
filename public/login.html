@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Masuk — CloudTrade</title>
+    <link rel="stylesheet" href="/styles.css?v=20260821-2" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <a class="brand" href="/">Cloud<span>Trade</span></a>
+      </header>
+      <section class="auth-only">
+        <form id="authForm" class="panel">
+          <div class="eyebrow">SECURE WORKSPACE</div>
+          <h1 id="authTitle">Masuk ke CloudTrade</h1>
+          <label id="nameLabel" hidden
+            >Nama<input id="displayName" autocomplete="name" /></label
+          ><label
+            >Email<input
+              id="email"
+              type="email"
+              autocomplete="email"
+              required /></label
+          ><label
+            >Password<input
+              id="password"
+              type="password"
+              minlength="8"
+              required /></label
+          ><button class="primary" type="submit">Lanjutkan</button>
+          <p id="authMessage" class="message"></p>
+          <p id="authSwitch">
+            Belum punya akun? <a href="/register">Daftar</a>
+          </p>
+        </form>
+      </section>
+    </main>
+    <script src="/auth.js" type="module"></script>
+  </body>
+</html>

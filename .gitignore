@@ -1,0 +1,11 @@
+# Local trading credentials and portable MetaTrader runtime
+login.txt
+HM/
+__pycache__/
+node_modules/
+.env
+runtime/
+coverage/
+npm-debug.log*
+.delete-safety-test/
+D:/logs/

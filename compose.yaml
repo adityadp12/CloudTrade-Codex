@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cloudtrade-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cloudtrade
+      POSTGRES_USER: cloudtrade
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudtrade_local_change_me}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - cloudtrade_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudtrade -d cloudtrade"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  cloudtrade_pgdata:
+    name: cloudtrade_pgdata

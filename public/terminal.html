@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MT5 Supervisor — CloudTrade</title>
+    <link rel="stylesheet" href="/styles.css?v=20260821-4" />
+  </head>
+  <body>
+    <main class="shell wide">
+      <header>
+        <a class="brand" href="/dashboard">Cloud<span>Trade</span></a
+        ><a class="ghost button-link" href="/terminals">← Terminal</a>
+      </header>
+      <div class="welcome compact">
+        <div>
+          <div class="eyebrow">MT5 CODEX SUPERVISOR</div>
+          <h1 id="title">Terminal</h1>
+          <p id="meta"></p>
+        </div>
+        <select id="terminalSelect"></select>
+      </div>
+      <div id="status" class="statusbar"></div>
+      <div id="metrics" class="stats"></div>
+      <details class="panel section" open>
+        <summary><b>Detail risiko terminal</b></summary>
+        <div id="risk" class="stats"></div>
+        <div id="riskAlerts" class="risk-alerts"></div>
+      </details>
+      <section class="panel section">
+        <h2>Resume trading terminal</h2>
+        <div id="resume" class="stats"></div>
+      </section>
+      <section class="panel section">
+        <div class="section-head">
+          <h2>Posisi terbuka</h2>
+          <span id="positionTotal"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Durasi</th>
+                <th>Symbol</th>
+                <th>Arah</th>
+                <th>Ticket</th>
+                <th>Lot</th>
+                <th>Buka</th>
+                <th>Sekarang</th>
+                <th>SL / jarak</th>
+                <th>TP / jarak</th>
+                <th>Profit</th>
+                <th>Magic</th>
+                <th>Komentar</th>
+              </tr>
+            </thead>
+            <tbody id="positions"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel section">
+        <h2>Kontrol risiko akun</h2>
+        <div class="controls">
+          <input
+            id="maxLoss"
+            type="number"
+            min="0"
+            placeholder="Max loss USD"
+          /><input
+            id="riskPercent"
+            type="number"
+            min="0.1"
+            max="100"
+            step="0.1"
+            placeholder="Risiko % (default 10)"
+          /><button id="saveLimit">Simpan & terapkan ke EA</button
+          ><button id="closeAll" class="danger">CLOSE ALL</button
+          ><button id="stopTrade">STOP TRADE</button
+          ><button id="resumeTrade">RESUME</button>
+        </div>
+        <p id="controlStatus" class="muted"></p>
+        <p id="riskFormula" class="muted"></p>
+      </section>
+      <section class="panel section">
+        <div class="section-head">
+          <div>
+            <h2>Grafik histori</h2>
+            <div id="metricButtons" class="controls"></div>
+          </div>
+          <div class="controls">
+            <select id="range">
+              <option value="24">Hari</option>
+              <option value="168">Minggu</option>
+              <option value="744">Bulan</option>
+              <option value="8784">Tahun</option>
+              <option value="custom">Tanggal khusus</option></select
+            ><input id="sinceDate" type="date" hidden /><button
+              id="applyDate"
+              hidden
+            >
+              Terapkan</button
+            ><button id="resetZoom">Reset zoom</button
+            ><button id="refresh">Refresh</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="mainChart"></canvas>
+          <div id="chartTooltip" class="tooltip"></div>
+          <div id="chartEmpty" class="empty">Menunggu data histori…</div>
+        </div>
+      </section>
+      <div class="two-col section">
+        <section class="panel">
+          <h2>Equity dan balance</h2>
+          <div class="chart-wrap small"><canvas id="equityChart"></canvas></div>
+        </section>
+        <section class="panel">
+          <h2>Ringkasan periode</h2>
+          <div id="periodStats" class="stats"></div>
+        </section>
+      </div>
+      <section class="panel section">
+        <div class="section-head">
+          <h2>Histori eksekusi</h2>
+          <div class="controls">
+            <select id="filterSymbol">
+              <option value="">Semua symbol</option></select
+            ><select id="filterSide">
+              <option value="">BUY & SELL</option>
+              <option>BUY</option>
+              <option>SELL</option></select
+            ><select id="filterResult">
+              <option value="">Semua hasil</option>
+              <option value="profit">Profit</option>
+              <option value="loss">Loss</option></select
+            ><select id="filterEntry">
+              <option value="">Semua entry</option>
+              <option value="0">IN</option>
+              <option value="1">OUT</option>
+              <option value="2">INOUT</option>
+              <option value="3">OUT BY</option></select
+            ><input id="filterSearch" placeholder="Ticket / komentar" /><button
+              id="exportCsv"
+            >
+              Ekspor CSV
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="executionHead">
+              <tr>
+                <th data-sort="executedAt">Waktu</th>
+                <th data-sort="durationMs">Durasi</th>
+                <th data-sort="symbol">Symbol</th>
+                <th data-sort="side">Arah</th>
+                <th data-sort="entryType">Entry</th>
+                <th data-sort="dealTicket">Deal</th>
+                <th data-sort="volume">Lot</th>
+                <th data-sort="price">Harga</th>
+                <th data-sort="profit">Gross</th>
+                <th data-sort="commission">Komisi</th>
+                <th data-sort="swap">Swap</th>
+                <th data-sort="net">Net</th>
+                <th data-sort="magic">Magic</th>
+                <th data-sort="comment">Komentar</th>
+              </tr>
+            </thead>
+            <tbody id="executions"></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="prevPage">←</button><span id="pageInfo"></span
+          ><button id="nextPage">→</button>
+        </div>
+      </section>
+      <div class="two-col section">
+        <section class="panel">
+          <div class="section-head">
+            <h2>Notifikasi risiko</h2>
+            <label><input id="soundAlerts" type="checkbox" /> Suara</label>
+          </div>
+          <div id="alerts" class="timeline"></div>
+        </section>
+        <section class="panel">
+          <h2>Penyimpanan telemetry</h2>
+          <div id="storage" class="stats"></div>
+        </section>
+      </div>
+    </main>
+    <div id="toastbox" class="toastbox"></div>
+    <script src="/terminal.js?v=20260821-5" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+CORE SYSTEM PROMPT - CLONE METATRADER 5 PORTABLE
+
+Tujuan:
+Membuat clone MetaTrader 5 yang mandiri di drive D, mempertahankan konfigurasi terminal aktif, menjalankannya dalam mode portable, dan memastikan akun demo terotorisasi tanpa pernah menampilkan atau menyalin kredensial ke output, log dokumentasi, maupun Git.
+
+Metode login utama:
+- Gunakan D:\Project\CloudTrade\mt5_direct_login.py dengan runtime D:\tools\python-3.13-embed\python.exe.
+- Script membaca login.txt saat runtime lalu memakai integrasi Python resmi MetaTrader5 dengan path terminal, login, password, server, timeout, dan portable=True.
+- Gunakan langkah UI di bawah hanya sebagai fallback apabila integrasi Python melaporkan server belum dikenal oleh terminal.
+
+Lokasi baku:
+- Instalasi sumber: D:\MetaTrader 5 BTC\MetaTrader 5\HM
+- Data terminal aktif: temukan dari %APPDATA%\MetaQuotes\Terminal\<HASH>\origin.txt yang isinya menunjuk ke instalasi sumber.
+- File kredensial lokal: D:\Project\CloudTrade\login.txt
+- Clone tujuan: D:\Project\CloudTrade\HM
+- Executable clone: D:\Project\CloudTrade\HM\terminal64.exe
+
+Aturan keamanan:
+1. Jangan pernah mencetak isi login.txt, nomor login, password, token, atau data akun.
+2. Pastikan login.txt dan HM/ tercantum di .gitignore.
+3. Jangan menimpa clone yang sedang berjalan.
+4. Jangan menghentikan terminal sumber kecuali pengguna meminta secara eksplisit.
+5. File cache market-history yang terkunci (*.hcc) boleh dilewati; terminal akan membuat atau mengunduhnya kembali.
+6. Verifikasi login hanya sebagai status boolean/event, tanpa menampilkan identitas akun.
+
+Prosedur:
+1. Pastikan instalasi sumber, terminal64.exe, dan login.txt tersedia.
+2. Temukan proses terminal64.exe yang sedang aktif dan catat ExecutablePath tanpa membuka kredensial.
+3. Temukan folder data aktif melalui file origin.txt di %APPDATA%\MetaQuotes\Terminal\<HASH>.
+4. Buat folder tujuan D:\Project\CloudTrade\HM hanya jika belum ada.
+5. Salin seluruh instalasi sumber ke folder tujuan memakai salinan rekursif yang mempertahankan data, atribut, dan timestamp.
+6. Overlay folder data aktif yang diperlukan, terutama config, profiles, MQL5, dan templates. Lewati origin.txt dan cache histori yang sedang dikunci.
+7. Jalankan clone dengan working directory folder tujuan dan argumen /portable:
+   D:\Project\CloudTrade\HM\terminal64.exe /portable
+8. Jalankan metode Python langsung terlebih dahulu:
+   D:\tools\python-3.13-embed\python.exe D:\Project\CloudTrade\mt5_direct_login.py
+9. Anggap login berhasil hanya bila account_matches, server_matches, dan terminal_connected bernilai true. trade_allowed juga harus true untuk workflow trading.
+10. Jika metode langsung gagal karena server belum dikenal, buka File > Login to Trade Account terlebih dahulu.
+11. Baca nama server persis dari login.txt secara rahasia, lalu buka dropdown Server dan periksa seluruh pilihan untuk mencari nama yang sama.
+12. Hanya jika nama server tersebut tidak tersedia di dropdown, batalkan dialog login, buka File > Open an Account, tambahkan server memakai nama/alamat yang disediakan login.txt, tunggu pencarian selesai, dan pilih hasil server yang sesuai. Jangan memilih server pertama atau server lain berdasarkan tebakan.
+13. Kembali ke File > Login to Trade Account, pilih server yang baru ditambahkan, lalu isi login dan password dari login.txt. Jangan mengetik atau menampilkan kredensial melalui terminal/output otomasi.
+14. Tunggu terminal membuat logs\YYYYMMDD.log di folder clone.
+15. Verifikasi:
+    - proses terminal64.exe dari folder clone masih hidup;
+    - command line menggunakan /portable;
+    - log berada di D:\Project\CloudTrade\HM\logs;
+    - log mencatat event authorized;
+    - konfigurasi/profile/MQL5 tersedia di folder clone.
+16. Laporkan hanya status keberhasilan, lokasi clone, PID, dan hasil verifikasi non-rahasia.
+
+Hasil referensi pada 21 Agustus 2026:
+- Clone berhasil dibuat di D:\Project\CloudTrade\HM.
+- Clone dijalankan dengan /portable.
+- Log portable berhasil dibuat.
+- Event authorized berhasil diverifikasi.
+- Terminal sumber tetap berjalan tanpa dihentikan.
+
+TRAINING TAMBAHAN - URUTAN WAJIB SETELAH CLONE
+
+Prinsip hasil koreksi pengguna:
+1. Jangan menganggap EA aktif hanya karena log menyatakan "loaded successfully". Pastikan Algo Trading aktif, simbol menerima live tick, terminal terhubung, dan EA tidak langsung removed/failed setelah dimuat.
+2. Jangan menebak suffix simbol dari profile lama. Daftar simbol harus diperiksa pada akun yang sudah login.
+3. Chart XAUUSD harus dibuat sebagai chart tambahan. Jangan mengganti chart Bridge menjadi XAUUSD.
+4. Mt5CodexBridge harus dipasang pada chart EURUSD, sedangkan HMCopyLot dipasang pada chart XAUUSD.
+5. Terminal sumber dan clone tidak boleh memakai InpTerminalId serta InpToken telemetry yang sama.
+6. Dashboard telemetry yang memakai Terminal ID sama tidak dapat dijadikan bukti login clone karena datanya dapat bercampur dengan terminal sumber.
+
+Urutan clone dan overlay yang benar:
+1. Hentikan hanya proses clone sebelum menyalin atau mengubah profile. Jangan hentikan terminal sumber.
+2. Salin instalasi sumber ke D:\Project\CloudTrade\HM.
+3. Temukan data aktif yang origin.txt-nya persis menunjuk ke D:\MetaTrader 5 BTC\MetaTrader 5\HM.
+4. Overlay config, MQL5, profiles/templates yang tersedia dari data aktif ke clone. Jangan melewatkan overlay ini karena daftar server aktif dapat berada di AppData, bukan di folder instalasi.
+5. Lakukan perubahan file chart hanya ketika proses clone sudah benar-benar berhenti. MT5 dapat menulis ulang profile lama ketika ditutup.
+6. Jalankan clone dengan /portable dan pastikan log ditulis di folder clone.
+
+Urutan login yang benar:
+1. Baca login.txt hanya di memori dan jangan pernah mencetak nilai rahasia.
+2. Pilih server berdasarkan nilai persis di login.txt. Periksa seluruh dropdown server sebelum menambahkan server baru.
+3. Gunakan mt5_direct_login.py sebagai metode utama.
+4. Jika perlu fallback UI, buka File > Login to Trade Account, isi login/password, pilih server yang cocok, aktifkan Save password, lalu submit.
+5. Login belum boleh dinyatakan berhasil hanya berdasarkan dashboard Bridge.
+6. Verifikasi langsung harus menghasilkan account_matches=true, server_matches=true, terminal_connected=true, dan trade_allowed=true.
+7. Verifikasi tambahan pada log clone: authorized, terminal synchronized, dan trading has been enabled harus terjadi pada sesi start terbaru. Redaksi nomor akun saat membaca atau melaporkan log.
+8. Uji persistensi dengan restart clone tanpa menjalankan login script lagi. Setelah restart, pastikan clone tetap terhubung.
+
+Validasi dan konfigurasi chart:
+1. Setelah login, panggil symbols_get() dan filter semua nama yang mengandung XAUUSD serta EURUSD.
+2. Untuk setiap kandidat XAUUSD, panggil symbol_select() dan symbol_info_tick(). Simbol dianggap berjalan hanya bila tick.time terbaru serta bid dan ask lebih besar dari nol.
+3. Pada akun referensi FBS-Demo tanggal 21 Agustus 2026, simbol emas valid adalah XAUUSD. XAUUSDm adalah sisa profile broker lain dan tidak valid untuk akun ini.
+4. Akun referensi menyediakan EURUSD dan EURUSDw. Gunakan EURUSD biasa sesuai permintaan pengguna.
+5. Pertahankan dua chart terpisah dalam profile Default:
+   - EURUSD H1: Experts\MT5-Codex\Mt5CodexBridge.ex5
+   - XAUUSD M5: Experts\HMCopyLot.ex5
+6. Setelah start, verifikasi log terbaru mencatat Mt5CodexBridge (EURUSD,H1) loaded successfully dan HMCopyLot (XAUUSD,M5) loaded successfully.
+7. Pastikan tidak ada event removed atau initialization failed setelah event loaded terbaru.
+
+Aktivasi Algo Trading dan izin EA:
+1. Pada D:\Project\CloudTrade\HM\Config\common.ini, section [Experts] harus tetap valid dan berisi sekurangnya:
+   AllowDllImport=1
+   Enabled=1
+   Account=0
+   Profile=0
+   Chart=0
+   Api=0
+   WebRequest=1
+2. Enabled=1 mengaktifkan Algo Trading global.
+3. Account=0, Profile=0, dan Chart=0 mencegah Algo Trading dimatikan otomatis ketika akun, profile, atau simbol/timeframe berubah.
+4. Jangan memakai regex replacement yang menghasilkan teks literal seperti $11 dan merusak header [Experts]. Setelah menulis file, baca ulang section tersebut dan verifikasi setiap baris.
+5. Pertahankan expertmode pada block <expert> chart. Verifikasi EA aktif melalui log runtime, bukan hanya isi file.
+6. Untuk Bridge, URL http://127.0.0.1:8787 harus berada dalam daftar WebRequest yang diizinkan.
+
+Pemisahan telemetry terminal:
+1. Input Bridge yang benar bernama InpTerminalId dan InpToken.
+2. Clone CloudTrade memakai InpTerminalId unik: cloudtrade-hm-fbs-demo-01.
+3. Buat InpToken acak unik minimal 32 karakter; referensi memakai 64 karakter hex. Jangan tampilkan token dalam output, dokumentasi, Git, atau log laporan.
+4. Simpan input unik pada block <inputs> chart EURUSD dan preset MQL5\Profiles\Presets\Mt5CodexBridge.set.
+5. Backend D:\MT5-Codex harus menerima token utama terminal sumber dan daftar auth.telemetryTokens untuk clone.
+6. Jika Bridge melaporkan HTTP 401, token EA belum terdaftar pada backend. Jangan menyatakan telemetry berhasil sebelum 401 berhenti.
+7. Setelah memperbarui backend, jalankan npm.cmd test, restart service Node dari D:\MT5-Codex, lalu cek /health.
+8. Verifikasi /api/v1/snapshot memiliki dua ID terpisah: mt5-hm-01 dan cloudtrade-hm-fbs-demo-01.
+9. Telemetry clone dianggap aktif bila receivedAt terus diperbarui, connected=true, dan symbol=EURUSD.
+
+Checklist selesai yang wajib dilaporkan sebagai boolean/non-rahasia:
+- clone_process_alive
+- portable_mode
+- login_account_matches
+- login_server_matches
+- terminal_connected
+- trade_allowed
+- authorized_and_synchronized
+- xauusd_live_tick
+- bridge_on_eurusd
+- hmcopylot_on_xauusd
+- algo_trading_enabled
+- unique_terminal_id
+- unique_token_registered
+- telemetry_received_without_401
+- source_terminal_untouched
+
+Kontrol risiko HMCopyLot CloudTrade:
+1. Binary HMCopyLot.ex5 tidak boleh dimodifikasi, didecompile, atau dicompile ulang.
+2. Gunakan hanya input resmi EA pada chart XAUUSD: InpMaxLoss dan InpTrailDist.
+3. Max Loss dashboard ditulis ke InpMaxLoss serta tetap diawasi oleh Mt5CodexBridge melalui API control CloudTrade.
+4. Risk percent user memiliki default 10%, nilai valid di atas 0 sampai 100.
+5. Hitung Trailing Distance dari spread live: max(ceil(spreadPoints * 2), ceil(spreadPoints * 200 / riskPercent)). Contoh spread 10 point: risiko 10% menghasilkan 200 point, 20% menghasilkan 100 point, dan 30% menghasilkan 67 point.
+6. Setelah user menyimpan risiko, hentikan hanya terminal tenant terkait secara aman, tulis input chart02.chr, lalu login ulang memakai credential terenkripsi milik terminal tersebut.
+7. Verifikasi account login, broker server, koneksi, dan proses terminal setelah reload. Jangan menyentuh terminal user lain.

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dashboard — CloudTrade</title>
+    <link rel="stylesheet" href="/styles.css?v=20260821-2" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <a class="brand" href="/dashboard">Cloud<span>Trade</span></a>
+        <div>
+          <span id="userName"></span>
+          <button id="logout" class="ghost">Keluar</button>
+        </div>
+      </header>
+      <section class="app-layout">
+        <aside class="sidebar">
+          <div class="eyebrow">WORKSPACE</div>
+          <nav>
+            <a class="nav-item" href="/dashboard">⌂ Dashboard</a
+            ><a class="nav-item" href="/terminals">▣ Terminal MT5</a
+            ><a class="nav-item" href="/activity">↻ Provisioning</a
+            ><a class="nav-item" href="/plans">◇ Paket</a>
+          </nav>
+        </aside>
+        <div class="app-content">
+          <div class="welcome">
+            <div>
+              <div class="eyebrow" id="pageEyebrow">CONTROL CENTER</div>
+              <h1 id="pageTitle">Dashboard</h1>
+              <p id="pageSubtitle"></p>
+            </div>
+            <button id="newTerminal" class="primary">
+              + Generate terminal
+            </button>
+          </div>
+          <div id="stats" class="stats"></div>
+          <div id="pageBody" class="section"></div>
+        </div>
+      </section>
+    </main>
+    <dialog id="terminalDialog">
+      <form id="terminalForm" method="dialog">
+        <div class="dialog-head">
+          <h2>Hubungkan akun MT5</h2>
+          <button class="icon" value="cancel">×</button>
+        </div>
+        <div class="form-grid">
+          <label>Nama terminal<input name="name" required /></label
+          ><label>Perusahaan broker<input name="company" required /></label
+          ><label>Server MT5<input name="server" required /></label
+          ><label
+            >Login MT5<input name="login" inputmode="numeric" required /></label
+          ><label class="full"
+            >Password MT5<input name="password" type="password" required
+          /></label>
+        </div>
+        <p id="terminalMessage" class="message"></p>
+        <button class="primary full-button">Generate terminal</button>
+      </form>
+    </dialog>
+    <div id="loadingOverlay" class="loading-overlay" hidden>
+      <div class="loading-card">
+        <span class="spinner"></span><b>Menjalankan workflow core…</b>
+      </div>
+    </div>
+    <script src="/dashboard.js?v=20260821-2" type="module"></script>
+  </body>
+</html>
