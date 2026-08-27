@@ -1,5 +1,5 @@
 {
-  "name": "cloudtrade",
+  "name": "tradecloud",
   "version": "1.0.0",
   "description": "Multi-tenant MT5 terminal provisioning SaaS",
   "main": "src/server.js",

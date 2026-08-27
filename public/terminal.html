@@ -3,14 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>MT5 Supervisor — CloudTrade</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-4" />
+    <title>MT5 Supervisor — TradeCloud</title>
+    <link rel="stylesheet" href="/styles.css?v=20260826-4" />
   </head>
   <body>
     <main class="shell wide">
       <header>
-        <a class="brand" href="/dashboard">Cloud<span>Trade</span></a
-        ><a class="ghost button-link" href="/terminals">← Terminal</a>
+        <a class="brand" href="/dashboard">Trade<span>Cloud</span></a>
+        <div class="header-actions">
+          <select class="language-switcher" aria-label="Language">
+            <option value="en">EN</option>
+            <option value="id">ID</option></select
+          ><a
+            class="ghost button-link"
+            href="/terminals"
+            data-i18n="backTerminals"
+            >← Terminals</a
+          >
+        </div>
       </header>
       <div class="welcome compact">
         <div>
@@ -23,35 +33,35 @@
       <div id="status" class="statusbar"></div>
       <div id="metrics" class="stats"></div>
       <details class="panel section" open>
-        <summary><b>Detail risiko terminal</b></summary>
+        <summary><b data-i18n="riskDetails">Terminal risk details</b></summary>
         <div id="risk" class="stats"></div>
         <div id="riskAlerts" class="risk-alerts"></div>
       </details>
       <section class="panel section">
-        <h2>Resume trading terminal</h2>
+        <h2 data-i18n="tradingSummary">Trading summary</h2>
         <div id="resume" class="stats"></div>
       </section>
       <section class="panel section">
         <div class="section-head">
-          <h2>Posisi terbuka</h2>
+          <h2 data-i18n="openPositionsTitle">Open positions</h2>
           <span id="positionTotal"></span>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Durasi</th>
-                <th>Symbol</th>
-                <th>Arah</th>
+                <th data-i18n="duration">Duration</th>
+                <th data-i18n="symbol">Symbol</th>
+                <th data-i18n="direction">Side</th>
                 <th>Ticket</th>
                 <th>Lot</th>
-                <th>Buka</th>
-                <th>Sekarang</th>
+                <th>Open</th>
+                <th>Current</th>
                 <th>SL / jarak</th>
                 <th>TP / jarak</th>
                 <th>Profit</th>
                 <th>Magic</th>
-                <th>Komentar</th>
+                <th data-i18n="comment">Comment</th>
               </tr>
             </thead>
             <tbody id="positions"></tbody>
@@ -59,7 +69,7 @@
         </div>
       </section>
       <section class="panel section">
-        <h2>Kontrol risiko akun</h2>
+        <h2 data-i18n="accountRiskControls">Account risk controls</h2>
         <div class="controls">
           <input
             id="maxLoss"
@@ -67,13 +77,21 @@
             min="0"
             placeholder="Max loss USD"
           /><input
+            id="lotSize"
+            type="number"
+            min="0.01"
+            max="100"
+            step="0.01"
+            placeholder="Lot (0.01–100)"
+          /><input
             id="riskPercent"
             type="number"
             min="0.1"
             max="100"
             step="0.1"
-            placeholder="Risiko % (default 10)"
-          /><button id="saveLimit">Simpan & terapkan ke EA</button
+            placeholder="Risk % (default 10)"
+          /><button id="saveLimit" data-i18n="saveApply">
+            Save & apply to EA</button
           ><button id="closeAll" class="danger">CLOSE ALL</button
           ><button id="stopTrade">STOP TRADE</button
           ><button id="resumeTrade">RESUME</button>
@@ -84,86 +102,94 @@
       <section class="panel section">
         <div class="section-head">
           <div>
-            <h2>Grafik histori</h2>
+            <h2 data-i18n="historyChart">History chart</h2>
             <div id="metricButtons" class="controls"></div>
           </div>
           <div class="controls">
             <select id="range">
-              <option value="24">Hari</option>
-              <option value="168">Minggu</option>
-              <option value="744">Bulan</option>
-              <option value="8784">Tahun</option>
-              <option value="custom">Tanggal khusus</option></select
+              <option value="24" data-i18n="day">Day</option>
+              <option value="168" data-i18n="week">Week</option>
+              <option value="744" data-i18n="month">Month</option>
+              <option value="8784" data-i18n="year">Year</option>
+              <option value="custom" data-i18n="customDate">
+                Custom date
+              </option></select
             ><input id="sinceDate" type="date" hidden /><button
               id="applyDate"
               hidden
             >
-              Terapkan</button
-            ><button id="resetZoom">Reset zoom</button
-            ><button id="refresh">Refresh</button>
+              <span data-i18n="apply">Apply</span></button
+            ><button id="resetZoom" data-i18n="resetZoom">Reset zoom</button
+            ><button id="refresh" data-i18n="refresh">Refresh</button>
           </div>
         </div>
         <div class="chart-wrap">
           <canvas id="mainChart"></canvas>
           <div id="chartTooltip" class="tooltip"></div>
-          <div id="chartEmpty" class="empty">Menunggu data histori…</div>
+          <div id="chartEmpty" class="empty" data-i18n="loadingHistory">
+            Waiting for history data…
+          </div>
         </div>
       </section>
       <div class="two-col section">
         <section class="panel">
-          <h2>Equity dan balance</h2>
+          <h2 data-i18n="equityBalance">Equity and balance</h2>
           <div class="chart-wrap small"><canvas id="equityChart"></canvas></div>
         </section>
         <section class="panel">
-          <h2>Ringkasan periode</h2>
+          <h2 data-i18n="periodSummary">Period summary</h2>
           <div id="periodStats" class="stats"></div>
         </section>
       </div>
       <section class="panel section">
         <div class="section-head">
-          <h2>Histori eksekusi</h2>
+          <h2 data-i18n="executionHistory">Execution history</h2>
           <div class="controls">
             <select id="filterSymbol">
-              <option value="">Semua symbol</option></select
+              <option value="" data-i18n="allSymbols">
+                All symbols
+              </option></select
             ><select id="filterSide">
               <option value="">BUY & SELL</option>
               <option>BUY</option>
               <option>SELL</option></select
             ><select id="filterResult">
-              <option value="">Semua hasil</option>
+              <option value="" data-i18n="allResults">All results</option>
               <option value="profit">Profit</option>
               <option value="loss">Loss</option></select
             ><select id="filterEntry">
-              <option value="">Semua entry</option>
+              <option value="" data-i18n="allEntries">All entries</option>
               <option value="0">IN</option>
               <option value="1">OUT</option>
               <option value="2">INOUT</option>
               <option value="3">OUT BY</option></select
-            ><input id="filterSearch" placeholder="Ticket / komentar" /><button
+            ><input id="filterSearch" placeholder="Ticket / comment" /><button
               id="exportCsv"
             >
-              Ekspor CSV
+              <span data-i18n="exportCsv">Export CSV</span>
             </button>
           </div>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="execution-table">
             <thead id="executionHead">
               <tr>
-                <th data-sort="executedAt">Waktu</th>
-                <th data-sort="durationMs">Durasi</th>
-                <th data-sort="symbol">Symbol</th>
-                <th data-sort="side">Arah</th>
+                <th data-sort="executedAt" data-i18n="time">Time</th>
+                <th data-sort="durationMs" data-i18n="duration">Duration</th>
+                <th data-sort="symbol" data-i18n="symbol">Symbol</th>
+                <th data-sort="side" data-i18n="direction">Side</th>
                 <th data-sort="entryType">Entry</th>
                 <th data-sort="dealTicket">Deal</th>
                 <th data-sort="volume">Lot</th>
-                <th data-sort="price">Harga</th>
+                <th data-sort="price" data-i18n="price">Price</th>
                 <th data-sort="profit">Gross</th>
-                <th data-sort="commission">Komisi</th>
+                <th data-sort="commission" data-i18n="commission">
+                  Commission
+                </th>
                 <th data-sort="swap">Swap</th>
                 <th data-sort="net">Net</th>
                 <th data-sort="magic">Magic</th>
-                <th data-sort="comment">Komentar</th>
+                <th data-sort="comment" data-i18n="comment">Comment</th>
               </tr>
             </thead>
             <tbody id="executions"></tbody>
@@ -177,18 +203,21 @@
       <div class="two-col section">
         <section class="panel">
           <div class="section-head">
-            <h2>Notifikasi risiko</h2>
-            <label><input id="soundAlerts" type="checkbox" /> Suara</label>
+            <h2 data-i18n="riskNotifications">Risk notifications</h2>
+            <label
+              ><input id="soundAlerts" type="checkbox" />
+              <span data-i18n="sound">Sound</span></label
+            >
           </div>
           <div id="alerts" class="timeline"></div>
         </section>
         <section class="panel">
-          <h2>Penyimpanan telemetry</h2>
+          <h2 data-i18n="telemetryStorage">Telemetry storage</h2>
           <div id="storage" class="stats"></div>
         </section>
       </div>
     </main>
     <div id="toastbox" class="toastbox"></div>
-    <script src="/terminal.js?v=20260821-5" type="module"></script>
+    <script src="/terminal.js?v=20260827-6" type="module"></script>
   </body>
 </html>

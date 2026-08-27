@@ -1,68 +1,206 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>CloudTrade — Managed MT5 Automation</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-2" />
+    <title>TradeCloud — Your MT5 Workspace, Always On</title>
+    <meta
+      name="description"
+      content="Launch isolated MT5 terminals, automate EA setup, monitor every account in real time, and recover failures from one secure workspace."
+    />
+    <link rel="stylesheet" href="/styles.css?v=20260826-2" />
   </head>
   <body>
-    <main class="shell">
+    <main class="shell landing-shell">
       <header>
-        <a class="brand" href="/">Cloud<span>Trade</span></a>
+        <a class="brand" href="/">Trade<span>Cloud</span></a>
         <nav class="public-nav">
-          <a href="/login">Masuk</a
-          ><a class="primary button-link" href="/register">Mulai gratis</a>
+          <select class="language-switcher" aria-label="Language">
+            <option value="en">EN</option>
+            <option value="id">ID</option>
+          </select>
+          <a href="#features" data-i18n="navFeatures">Features</a>
+          <a href="/login" data-i18n="signIn">Sign in</a>
+          <a class="primary button-link" href="/register" data-i18n="startFree"
+            >Start free</a
+          >
         </nav>
       </header>
-      <section class="landing-hero">
-        <div>
-          <div class="eyebrow">MANAGED MT5 AUTOMATION</div>
-          <h1>Terminal trading Anda,<br /><em>siap dan terpantau.</em></h1>
-          <p>
-            Provisioning MT5 terisolasi, pemasangan EA otomatis, telemetry
-            realtime, risk control, dan recovery dari satu cloud dashboard.
+
+      <section class="landing-hero landing-hero-new">
+        <div class="landing-copy">
+          <div class="hero-pill">
+            <span></span
+            ><span data-i18n="heroPill"
+              >MT5 infrastructure that works while you sleep</span
+            >
+          </div>
+          <h1 data-i18n="heroTitle">
+            Run every MT5 account from one intelligent workspace.
+          </h1>
+          <p data-i18n="heroDescription">
+            TradeCloud provisions isolated terminals, installs your EAs, watches
+            risk and execution in real time, then repairs operational failures
+            automatically—so your trading setup stays ready wherever you are.
           </p>
           <div class="hero-actions">
-            <a class="primary button-link" href="/register">Buat akun</a
-            ><a class="ghost button-link" href="/login">Masuk dashboard</a>
+            <a
+              class="primary button-link large"
+              href="/register"
+              data-i18n="launchWorkspace"
+              >Launch your workspace</a
+            >
+            <a
+              class="ghost button-link large"
+              href="/login"
+              data-i18n="openDashboard"
+              >Open dashboard</a
+            >
+          </div>
+          <div class="trust-row">
+            <span data-i18n="trustOne">✓ Isolated credentials</span
+            ><span data-i18n="trustTwo">✓ Live telemetry</span
+            ><span data-i18n="trustThree">✓ Automated recovery</span>
           </div>
         </div>
-        <div class="panel hero-console">
-          <div class="statusbar">
-            <b>MT5 connected</b><span>Algo ON</span><span>Telemetry live</span>
+        <div class="product-preview">
+          <div class="preview-top">
+            <div>
+              <span class="preview-dot red"></span
+              ><span class="preview-dot amber"></span
+              ><span class="preview-dot green"></span>
+            </div>
+            <span>tradecloud / overview</span><b>LIVE</b>
           </div>
-          <div class="stats">
-            <div class="stat"><span>Equity</span><b>$12,480</b></div>
-            <div class="stat"><span>Risk</span><b>NORMAL</b></div>
-            <div class="stat"><span>Terminal</span><b>4 online</b></div>
-            <div class="stat"><span>Provisioning</span><b>Automatis</b></div>
+          <div class="preview-balance">
+            <span data-i18n="totalEquity">Total equity</span
+            ><strong>$24,960.40</strong
+            ><small class="good">+$384.20 today</small>
+          </div>
+          <div class="preview-grid">
+            <div>
+              <span data-i18n="terminalsOnline">Terminals online</span
+              ><b>4 / 4</b>
+            </div>
+            <div>
+              <span data-i18n="openPositions">Open positions</span><b>7</b>
+            </div>
+            <div>
+              <span data-i18n="riskStatus">Risk status</span
+              ><b class="good">NORMAL</b>
+            </div>
+          </div>
+          <div class="preview-chart">
+            <i></i
+            ><svg
+              viewBox="0 0 500 120"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M0,96 C45,88 58,105 92,78 S145,89 180,62 S232,74 270,48 S332,59 364,31 S430,40 500,12"
+              />
+            </svg>
+          </div>
+          <div class="preview-terminal">
+            <span class="status-dot online"></span>
+            <div><b>Gold Strategy</b><small>EURUSD · XAUUSD</small></div>
+            <span class="good">Connected</span>
           </div>
         </div>
       </section>
-      <section class="landing-features">
-        <article>
-          <b>Terminal terisolasi</b>
-          <p>
-            Credential, proses, token dan data dipisahkan untuk setiap akun
-            user.
-          </p>
-        </article>
-        <article>
-          <b>MT5 Codex Supervisor</b>
-          <p>
-            Portfolio, posisi, performa, histori, execution dan alert dalam satu
-            tempat.
-          </p>
-        </article>
-        <article>
-          <b>Kontrol risiko</b>
-          <p>
-            Max loss, stop trading, resume dan close-all diteruskan ke EA
-            terminal.
-          </p>
-        </article>
+
+      <section class="value-strip">
+        <div>
+          <b>24/7</b><span data-i18n="monitoring">Terminal monitoring</span>
+        </div>
+        <div>
+          <b>&lt; 15s</b><span data-i18n="telemetry">Telemetry updates</span>
+        </div>
+        <div>
+          <b>AES-256</b
+          ><span data-i18n="encryption">Credential encryption</span>
+        </div>
+        <div>
+          <b>1-click</b><span data-i18n="recovery">Terminal recovery</span>
+        </div>
       </section>
+
+      <section id="features" class="landing-section">
+        <div class="section-intro">
+          <span class="eyebrow" data-i18n="controlEyebrow"
+            >CONTROL WITHOUT COMPLEXITY</span
+          >
+          <h2 data-i18n="controlTitle">
+            Everything your MT5 operation needs to stay reliable.
+          </h2>
+          <p data-i18n="controlDescription">
+            Move beyond remote desktops and manual setup. TradeCloud turns every
+            account into a managed, observable trading environment.
+          </p>
+        </div>
+        <div class="landing-features feature-grid-new">
+          <article>
+            <span class="feature-icon">01</span
+            ><b data-i18n="featureOneTitle">Isolated terminal environments</b>
+            <p data-i18n="featureOneBody">
+              Every account receives its own portable runtime, encrypted
+              credentials, telemetry identity and process lifecycle.
+            </p>
+          </article>
+          <article>
+            <span class="feature-icon">02</span
+            ><b data-i18n="featureTwoTitle">A live trading command center</b>
+            <p data-i18n="featureTwoBody">
+              See equity, exposure, positions, execution history, margin and
+              risk signals from your phone or desktop.
+            </p>
+          </article>
+          <article>
+            <span class="feature-icon">03</span
+            ><b data-i18n="featureThreeTitle"
+              >Risk controls that reach the EA</b
+            >
+            <p data-i18n="featureThreeBody">
+              Configure lot size, max loss and trailing distance, stop entries
+              or close positions without opening the RDP.
+            </p>
+          </article>
+          <article>
+            <span class="feature-icon">04</span
+            ><b data-i18n="featureFourTitle"
+              >Recovery built into the workflow</b
+            >
+            <p data-i18n="featureFourBody">
+              Repair validates the terminal, broker session, charts, EAs,
+              WebRequest access and telemetry before declaring success.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-cta">
+        <div>
+          <span class="eyebrow" data-i18n="ctaEyebrow"
+            >YOUR TRADING INFRASTRUCTURE, SIMPLIFIED</span
+          >
+          <h2 data-i18n="ctaTitle">
+            Spend less time maintaining terminals. Stay focused on your
+            strategy.
+          </h2>
+        </div>
+        <a
+          class="primary button-link large"
+          href="/register"
+          data-i18n="startNow"
+          >Start now</a
+        >
+      </section>
+      <footer>
+        <a class="brand" href="/">Trade<span>Cloud</span></a>
+        <p data-i18n="footerText">Managed MT5 operations for modern traders.</p>
+      </footer>
     </main>
+    <script src="/landing.js?v=20260826-2" type="module"></script>
   </body>
 </html>

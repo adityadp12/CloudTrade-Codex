@@ -1,6 +1,6 @@
-# CloudTrade
+# TradeCloud
 
-CloudTrade adalah control plane multi-tenant untuk provisioning dan pengelolaan terminal MetaTrader 5 portable. Backend menyimpan user, paket, secret terenkripsi, token telemetry, histori trading, kontrol risiko, dan provisioning job di PostgreSQL. Seluruh migration berada di repository.
+TradeCloud adalah control plane multi-tenant untuk provisioning dan pengelolaan terminal MetaTrader 5 portable. Backend menyimpan user, paket, secret terenkripsi, token telemetry, histori trading, kontrol risiko, dan provisioning job di PostgreSQL. Seluruh migration berada di repository.
 
 ## Komponen
 
@@ -40,7 +40,7 @@ Setiap terminal mempunyai portable directory, credential terenkripsi, telemetry 
 
 ## Kontrol risiko HMCopyLot
 
-CloudTrade tidak mengubah atau melakukan decompile terhadap `HMCopyLot.ex5`. Sistem hanya mengatur input resmi `InpMaxLoss` dan `InpTrailDist`, lalu me-reload terminal tenant menggunakan credential user yang terenkripsi.
+TradeCloud tidak mengubah atau melakukan decompile terhadap `HMCopyLot.ex5`. Sistem hanya mengatur input resmi `InpMaxLoss` dan `InpTrailDist`, lalu me-reload terminal tenant menggunakan credential user yang terenkripsi.
 
 ```text
 TrailingDistance = max(2 * spreadPoints, ceil(spreadPoints * 200 / riskPercent))

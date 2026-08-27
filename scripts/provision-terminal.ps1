@@ -5,6 +5,7 @@ param(
   [Parameter(Mandatory=$true)][string]$PythonExe,
   [Parameter(Mandatory=$true)][string]$TelemetryEndpoint,
   [double]$MaxLossUsd=0,
+  [ValidateRange(0.01,100)][double]$LotSize=0.01,
   [int]$TrailingDistancePoints=100
 )
 $ErrorActionPreference = 'Stop'
@@ -91,6 +92,17 @@ $text = [IO.File]::ReadAllText($common, $unicode)
 foreach ($pair in @(@('AllowDllImport','1'),@('Enabled','1'),@('Account','0'),@('Profile','0'),@('Chart','0'),@('Api','0'),@('WebRequest','1'))) {
   $text = Set-IniValue $text $pair[0] $pair[1]
 }
+# WebRequestUrl is encoded by MT5 for the current Windows user. Reuse the
+# golden image value so repair remains headless when no interactive desktop
+# is available (for example, when initiated from a phone).
+$goldenCommon = Join-Path $GoldenImage 'Config\common.ini'
+if (Test-Path -LiteralPath $goldenCommon) {
+  $goldenText = [IO.File]::ReadAllText($goldenCommon, $unicode)
+  $goldenWebRequest = [regex]::Match($goldenText, '(?m)^WebRequestUrl=(.+)$')
+  if ($goldenWebRequest.Success) {
+    $text = Set-IniValue $text 'WebRequestUrl' $goldenWebRequest.Groups[1].Value.Trim()
+  }
+}
 [IO.File]::WriteAllText($common, $text, $unicode)
 $text = [IO.File]::ReadAllText($common, $unicode)
 foreach ($pattern in @('(?m)^AllowDllImport=1$','(?m)^Enabled=1$','(?m)^Account=0$','(?m)^Profile=0$','(?m)^Chart=0$','(?m)^WebRequest=1$')) { Assert-Match $text $pattern 'Algo Trading configuration verification failed' }
@@ -128,7 +140,9 @@ $text = [regex]::Replace($text, '(?m)^name=.*$', 'name=HMCopyLot', 1)
 $text = [regex]::Replace($text, '(?m)^path=Experts\\.*$', 'path=Experts\HMCopyLot.ex5', 1)
 $text = [regex]::Replace($text, '(?m)^expertmode=\d+$', 'expertmode=1')
 $riskLoss = $MaxLossUsd.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
+$riskLot = $LotSize.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
 $text = if ($text -match '(?m)^InpMaxLoss=.*\r?$') { [regex]::Replace($text,'(?m)^InpMaxLoss=.*\r?$',"InpMaxLoss=$riskLoss`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpMaxLoss=$riskLoss" }
+$text = if ($text -match '(?m)^InpLot=.*\r?$') { [regex]::Replace($text,'(?m)^InpLot=.*\r?$',"InpLot=$riskLot`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpLot=$riskLot" }
 $text = if ($text -match '(?m)^InpTrailDist=.*\r?$') { [regex]::Replace($text,'(?m)^InpTrailDist=.*\r?$',"InpTrailDist=$TrailingDistancePoints`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpTrailDist=$TrailingDistancePoints" }
 [IO.File]::WriteAllText($chart2, $text, $unicode)
 
@@ -232,9 +246,15 @@ $env:CT_WEBREQUEST_URL = $TelemetryEndpoint
 $webRequestLines = @(& $PythonExe (Join-Path $PSScriptRoot 'allow-webrequest.py'))
 $webRequestExit = $LASTEXITCODE
 $webRequestOutput = $webRequestLines | Select-Object -Last 1
-try { $webRequestResult = $webRequestOutput | ConvertFrom-Json } catch { throw 'WebRequest allowlist returned an invalid response' }
-if ($webRequestExit -ne 0 -or -not $webRequestResult.success) { throw "WebRequest allowlist failed: $($webRequestResult.message)" }
-Write-ProgressEvent 'WEBREQUEST_ALLOWLIST' 'Endpoint CloudTrade diizinkan oleh MT5' 'success'
+try { $webRequestResult = $webRequestOutput | ConvertFrom-Json } catch { $webRequestResult = [pscustomobject]@{ success = $false; message = 'invalid UI automation response' } }
+if ($webRequestExit -ne 0 -or -not $webRequestResult.success) {
+  # Kontrol Options MT5 berbeda antar build/broker. common.ini sudah membawa
+  # konfigurasi WebRequest dari golden/overlay, jadi kegagalan automasi UI
+  # tidak boleh menghentikan repair sebelum telemetry benar-benar diverifikasi.
+  Write-ProgressEvent 'WEBREQUEST_ALLOWLIST' "Automasi UI WebRequest tidak tersedia ($($webRequestResult.message)); lanjut verifikasi telemetry" 'warning'
+} else {
+  Write-ProgressEvent 'WEBREQUEST_ALLOWLIST' 'Endpoint CloudTrade diizinkan oleh MT5' 'success'
+}
 
 Write-ProgressEvent 'BRIDGE_RESTART' 'Restart terminal agar izin WebRequest aktif pada EA Bridge'
 $tenantProcess = Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'" | Where-Object { $_.ExecutablePath -eq $terminalExe -or $_.CommandLine -like "*$TerminalKey*" }

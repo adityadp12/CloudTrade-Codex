@@ -26,7 +26,7 @@ async function claimJob() {
 
 async function contextFor(job) {
   const result = await query(
-    "SELECT t.*,s.encrypted_credentials,tc.token_ciphertext,coalesce(c.max_loss_usd,0) risk_max_loss_usd,coalesce(c.trailing_distance_points,100) risk_trailing_distance_points FROM terminals t JOIN terminal_secrets s ON s.terminal_id=t.id JOIN telemetry_credentials tc ON tc.terminal_id=t.id LEFT JOIN terminal_controls c ON c.terminal_id=t.id WHERE t.id=$1",
+    "SELECT t.*,s.encrypted_credentials,tc.token_ciphertext,coalesce(c.max_loss_usd,0) risk_max_loss_usd,coalesce(c.lot_size,0.01) risk_lot_size,coalesce(c.trailing_distance_points,100) risk_trailing_distance_points FROM terminals t JOIN terminal_secrets s ON s.terminal_id=t.id JOIN telemetry_credentials tc ON tc.terminal_id=t.id LEFT JOIN terminal_controls c ON c.terminal_id=t.id WHERE t.id=$1",
     [job.terminal_id],
   );
   if (!result.rows[0])
@@ -45,6 +45,124 @@ const redact = (value) =>
     .replace(/(password|token|login)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
     .replace(/\b\d{6,20}\b/g, "[REDACTED]")
     .slice(0, 1000);
+
+async function runCodexRepair(job, failure, round) {
+  const history = await query(
+    "SELECT stage,level,message FROM provisioning_job_logs WHERE job_id=$1 ORDER BY id DESC LIMIT 40",
+    [job.id],
+  );
+  const safeContext = {
+    repairRound: round,
+    errorCode: redact(failure.code ?? "PROVISIONER_FAILED"),
+    errorMessage: redact(failure.message),
+    logs: history.rows
+      .reverse()
+      .map((entry) => `${redact(entry.stage)}: ${redact(entry.message)}`),
+  };
+  const prompt = [
+    "Anda adalah auto-repair engineer untuk repository TradeCloud yang sedang dibuka.",
+    "Temukan akar kegagalan provisioning dari konteks tersanitasi berikut, lalu PERBAIKI file repository yang menjadi penyebabnya.",
+    "Batasi perubahan pada D:\\Project\\CloudTrade. Jangan membaca atau mengubah .env, login.txt, .git, folder tenant, credential, token, atau file di luar repository.",
+    "Jangan menjalankan terminal MT5, jangan menghapus data, dan jangan mengubah binary EX5. Anda boleh memperbaiki JavaScript, PowerShell, Python, migration, dan test di repository.",
+    "Pertahankan perubahan user yang tidak terkait. Jalankan pemeriksaan sintaks dan test yang aman setelah perbaikan.",
+    "Jika penyebabnya credential broker, layanan eksternal, atau hal yang tidak dapat diperbaiki melalui kode, jangan mengarang perbaikan; jelaskan blocker secara singkat.",
+    "Jawaban akhir maksimal 5 baris: akar masalah, file yang diubah, validasi, dan apakah aman dicoba ulang.",
+    JSON.stringify(safeContext),
+  ].join("\n\n");
+  await jobLog(
+    job,
+    "ANALYZING_ERROR",
+    `Menganalisis error dan menyiapkan perbaikan otomatis (putaran ${round})`,
+  );
+  const result = await new Promise((resolveRepair, rejectRepair) => {
+    const codexArgs = [
+      "exec",
+      "--json",
+      "--sandbox",
+      "workspace-write",
+      "--config",
+      "approval_policy=never",
+      "--cd",
+      process.cwd(),
+      "-",
+    ];
+    const command =
+      process.platform === "win32"
+        ? process.env.ComSpec || "cmd.exe"
+        : config.codexCommand;
+    const args =
+      process.platform === "win32"
+        ? [
+            "/d",
+            "/s",
+            "/c",
+            `call "${config.codexCommand}" ${codexArgs.map((value) => `"${value.replaceAll('"', '""')}"`).join(" ")}`,
+          ]
+        : codexArgs;
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      windowsHide: true,
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) =>
+            ![
+              "DATABASE_URL",
+              "JWT_SECRET",
+              "CREDENTIALS_MASTER_KEY",
+              "CT_BROKER_LOGIN",
+              "CT_BROKER_PASSWORD",
+              "CT_TELEMETRY_TOKEN",
+            ].includes(key),
+        ),
+      ),
+    });
+    let stdout = "",
+      stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill();
+      rejectRepair(new Error("Perbaikan otomatis melewati batas waktu"));
+    }, 300_000);
+    child.stdout.on("data", (value) => (stdout += value));
+    child.stderr.on("data", (value) => (stderr += value));
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      rejectRepair(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0)
+        return rejectRepair(
+          new Error(
+            redact(stderr.trim().split(/\r?\n/)[0]) ||
+              `Proses perbaikan keluar dengan kode ${code}`,
+          ),
+        );
+      const messages = stdout
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .flatMap((line) => {
+          try {
+            const event = JSON.parse(line);
+            return event.item?.type === "agent_message"
+              ? [event.item.text || event.item.content || ""]
+              : [];
+          } catch {
+            return [];
+          }
+        })
+        .filter(Boolean);
+      resolveRepair(messages.at(-1) || "Perbaikan selesai tanpa ringkasan.");
+    });
+    child.stdin.end(prompt);
+  });
+  await jobLog(job, "APPLYING_FIX", "Perbaikan repository sudah diterapkan");
+  for (const paragraph of redact(result)
+    .split(/\n+/)
+    .filter(Boolean)
+    .slice(0, 8)) {
+    await jobLog(job, "APPLYING_FIX", paragraph, "info");
+  }
+}
 
 async function jobLog(job, stage, message, level = "info") {
   const safe = redact(message);
@@ -85,6 +203,8 @@ function runProvision(job, context) {
         config.telemetryBaseUrl,
         "-MaxLossUsd",
         String(context.terminal.risk_max_loss_usd ?? 0),
+        "-LotSize",
+        String(context.terminal.risk_lot_size ?? 0.01),
         "-TrailingDistancePoints",
         String(context.terminal.risk_trailing_distance_points || 100),
       ],
@@ -104,7 +224,8 @@ function runProvision(job, context) {
     let stdout = "",
       stderr = "",
       pending = "",
-      lastProgressError = "";
+      lastProgressError = "",
+      progressWrites = Promise.resolve();
     child.stdout.on("data", (value) => {
       stdout += value;
       pending += value;
@@ -116,7 +237,9 @@ function runProvision(job, context) {
           if (event.type === "progress" && event.level === "error")
             lastProgressError = redact(event.message);
           if (event.type === "progress")
-            void jobLog(job, event.stage, event.message, event.level);
+            progressWrites = progressWrites.then(() =>
+              jobLog(job, event.stage, event.message, event.level),
+            );
         } catch {
           /* final output and non-structured output are not exposed */
         }
@@ -126,7 +249,12 @@ function runProvision(job, context) {
       stderr += value;
     });
     child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
+      try {
+        await progressWrites;
+      } catch (error) {
+        return reject(error);
+      }
       if (code !== 0)
         return reject(
           Object.assign(
@@ -169,6 +297,8 @@ function runRiskConfig(job, context, control) {
         config.pythonExe,
         "-MaxLossUsd",
         String(control.max_loss_usd),
+        "-LotSize",
+        String(control.lot_size),
         "-TrailingDistancePoints",
         String(control.trailing_distance_points),
       ],
@@ -213,6 +343,50 @@ function runRiskConfig(job, context, control) {
   });
 }
 
+async function provisionAndVerify(job, context) {
+  const result = await runProvision(job, context);
+  await jobLog(
+    job,
+    "TELEMETRY_VERIFY",
+    "Menunggu heartbeat telemetry Bridge tanpa HTTP 401",
+  );
+  let telemetry;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const check = await query(
+      "SELECT tl.connected,tl.symbol,tl.received_at,tc.last_used_at FROM terminal_telemetry_latest tl JOIN telemetry_credentials tc ON tc.terminal_id=tl.terminal_id WHERE tl.terminal_id=$1 AND tl.received_at > now()-interval '45 seconds'",
+      [job.terminal_id],
+    );
+    telemetry = check.rows[0];
+    if (telemetry?.connected && /^EURUSD/i.test(telemetry.symbol ?? "")) break;
+    await wait(2000);
+  }
+  if (!telemetry?.connected || !/^EURUSD/i.test(telemetry.symbol ?? "")) {
+    throw Object.assign(
+      new Error("Telemetry Bridge tidak diterima dari chart EURUSD"),
+      { code: "TELEMETRY_NOT_VERIFIED" },
+    );
+  }
+  result.checks = {
+    ...(result.checks ?? {}),
+    unique_token_registered: true,
+    telemetry_received_without_401: true,
+  };
+  await jobLog(
+    job,
+    "TELEMETRY_VERIFY",
+    "Telemetry EURUSD diterima dan token diterima backend",
+    "success",
+  );
+  return result;
+}
+
+function canAutoRepair(error) {
+  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  return !/credential|invalid account|authorization failed|account disabled|subscription|market closed/.test(
+    text,
+  );
+}
+
 async function execute(job) {
   const context = await contextFor(job);
   await jobLog(
@@ -222,7 +396,7 @@ async function execute(job) {
   );
   if (job.action === "apply-risk") {
     const selected = await query(
-      "SELECT max_loss_usd,risk_percent,trailing_distance_points FROM terminal_controls WHERE terminal_id=$1",
+      "SELECT max_loss_usd,lot_size,risk_percent,trailing_distance_points FROM terminal_controls WHERE terminal_id=$1",
       [job.terminal_id],
     );
     if (!selected.rows[0])
@@ -232,7 +406,7 @@ async function execute(job) {
     await jobLog(
       job,
       "RISK_CONFIG",
-      "Menerapkan Max Loss dan Trailing Distance ke input HMCopyLot",
+      "Menerapkan lot, Max Loss, dan Trailing Distance ke input HMCopyLot",
     );
     const result = await runRiskConfig(job, context, selected.rows[0]);
     await query(
@@ -272,39 +446,49 @@ async function execute(job) {
       { code: "ACTION_NOT_IMPLEMENTED" },
     );
   }
-  const result = await runProvision(job, context);
-  await jobLog(
-    job,
-    "TELEMETRY_VERIFY",
-    "Menunggu heartbeat telemetry Bridge tanpa HTTP 401",
-  );
-  let telemetry;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const check = await query(
-      "SELECT tl.connected,tl.symbol,tl.received_at,tc.last_used_at FROM terminal_telemetry_latest tl JOIN telemetry_credentials tc ON tc.terminal_id=tl.terminal_id WHERE tl.terminal_id=$1 AND tl.received_at > now()-interval '45 seconds'",
-      [job.terminal_id],
-    );
-    telemetry = check.rows[0];
-    if (telemetry?.connected && /^EURUSD/i.test(telemetry.symbol ?? "")) break;
-    await wait(2000);
+  let result;
+  const maxRuns = job.action === "repair" ? 3 : 1;
+  for (let run = 1; run <= maxRuns; run += 1) {
+    try {
+      await jobLog(
+        job,
+        job.action === "repair"
+          ? run === 1
+            ? "REPAIR_START"
+            : "REPAIR_RETRY"
+          : "PROVISIONING_START",
+        job.action === "repair"
+          ? `Menjalankan pemeriksaan dan pemulihan terminal (${run}/${maxRuns})`
+          : "Menjalankan provisioning terminal",
+      );
+      result = await provisionAndVerify(job, context);
+      break;
+    } catch (error) {
+      if (job.action !== "repair" || run === maxRuns || !canAutoRepair(error))
+        throw error;
+      await jobLog(
+        job,
+        "ERROR_DETECTED",
+        `Ditemukan kendala: ${redact(error.message)}`,
+        "warning",
+      );
+      try {
+        await runCodexRepair(job, error, run);
+      } catch (repairError) {
+        await jobLog(
+          job,
+          "AUTO_FIX_FAILED",
+          `Perbaikan otomatis belum berhasil: ${redact(repairError.message)}`,
+          "warning",
+        );
+      }
+      await jobLog(
+        job,
+        "REPAIR_RETRY",
+        "Memuat perubahan dan mencoba kembali secara otomatis",
+      );
+    }
   }
-  if (!telemetry?.connected || !/^EURUSD/i.test(telemetry.symbol ?? "")) {
-    throw Object.assign(
-      new Error("Telemetry Bridge tidak diterima dari chart EURUSD"),
-      { code: "TELEMETRY_NOT_VERIFIED" },
-    );
-  }
-  result.checks = {
-    ...(result.checks ?? {}),
-    unique_token_registered: true,
-    telemetry_received_without_401: true,
-  };
-  await jobLog(
-    job,
-    "TELEMETRY_VERIFY",
-    "Telemetry EURUSD diterima dan token diterima backend",
-    "success",
-  );
   await jobLog(job, "RUNNING", "Semua pemeriksaan core selesai", "success");
   await query(
     "UPDATE provisioning_jobs SET status='succeeded',stage='RUNNING',finished_at=now(),result=$2 WHERE id=$1",
@@ -343,7 +527,7 @@ process.on("SIGINT", () => {
 });
 
 console.log(
-  `CloudTrade worker ${config.workerId} started; provisioning=${config.provisioningEnabled}`,
+  `TradeCloud worker ${config.workerId} started; provisioning=${config.provisioningEnabled}`,
 );
 while (!stopping) {
   const job = await claimJob();

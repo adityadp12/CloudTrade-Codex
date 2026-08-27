@@ -1,3 +1,6 @@
+import { applyLanguage, getLanguage, t as translate } from "./i18n.js";
+
+applyLanguage();
 const $ = (s) => document.querySelector(s),
   id = location.pathname.split("/").pop(),
   entryNames = ["IN", "OUT", "INOUT", "OUT BY"];
@@ -7,17 +10,45 @@ let data,
   page = 1,
   sort = { key: "executedAt", direction: "desc" },
   timer,
+  loadInFlight = false,
   alertCount = 0,
   riskDraftDirty = false;
+const esc = (value) =>
+  String(value ?? "").replace(
+    /[&<>'"]/g,
+    (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
+        char
+      ],
+  );
+const bi = (english, indonesian) =>
+  getLanguage() === "id" ? indonesian : english;
 const api = async (p, o = {}) => {
-    const r = await fetch(p, {
-      headers: { "Content-Type": "application/json" },
-      ...o,
-    });
-    const d = await r.json().catch(() => ({}));
-    if (r.status === 401) location.href = "/login";
-    if (!r.ok) throw Error(d.error || `HTTP ${r.status}`);
-    return d;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const r = await fetch(p, {
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        cache: "no-store",
+        ...o,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 401) {
+        location.replace("/login");
+        throw Object.assign(new Error("Session expired"), { silent: true });
+      }
+      if (!r.ok) throw Error(d.error || `HTTP ${r.status}`);
+      return d;
+    } catch (error) {
+      if (error.name === "AbortError")
+        throw new Error(
+          bi("Request timed out", "Permintaan melewati batas waktu"),
+        );
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   },
   num = (n) => Number(n || 0),
   usd = (n) =>
@@ -26,13 +57,20 @@ const api = async (p, o = {}) => {
       currency: "USD",
     }).format(num(n)),
   pct = (n) => `${num(n).toFixed(2)}%`,
-  dt = (x) => (x ? new Date(x).toLocaleString("id-ID") : "-"),
+  dt = (x) =>
+    x
+      ? new Date(x).toLocaleString(getLanguage() === "id" ? "id-ID" : "en-US")
+      : "-",
   dur = (ms) => {
     let s = Math.max(0, Math.floor(ms / 1000)),
       d = Math.floor(s / 86400),
       h = Math.floor((s % 86400) / 3600),
       m = Math.floor((s % 3600) / 60);
-    return d ? `${d}h ${h}j` : h ? `${h}j ${m}m` : `${m}m`;
+    return d
+      ? bi(`${d}d ${h}h`, `${d}h ${h}j`)
+      : h
+        ? bi(`${h}h ${m}m`, `${h}j ${m}m`)
+        : `${m}m`;
   },
   net = (x) => num(x.profit) + num(x.commission) + num(x.swap),
   side = (x) => x.side || (num(x.dealType) === 1 ? "SELL" : "BUY"),
@@ -91,7 +129,15 @@ function risk() {
   };
 }
 function draw(canvas, rows, keys, colors) {
-  const dpr = devicePixelRatio || 1,
+  const maxPoints = matchMedia("(max-width: 800px)").matches ? 120 : 320;
+  if (rows.length > maxPoints) {
+    const step = (rows.length - 1) / (maxPoints - 1);
+    rows = Array.from(
+      { length: maxPoints },
+      (_, index) => rows[Math.min(rows.length - 1, Math.round(index * step))],
+    );
+  }
+  const dpr = Math.min(2, devicePixelRatio || 1),
     w = canvas.clientWidth || 700,
     h = canvas.clientHeight || 280;
   canvas.width = w * dpr;
@@ -146,6 +192,21 @@ function filteredExecutions() {
     if (sort.key === "executedAt") {
       x = Date.parse(x);
       y = Date.parse(y);
+    } else if (
+      [
+        "durationMs",
+        "entryType",
+        "volume",
+        "price",
+        "profit",
+        "commission",
+        "swap",
+        "net",
+        "magic",
+      ].includes(sort.key)
+    ) {
+      x = num(x);
+      y = num(y);
     }
     return (x > y ? 1 : x < y ? -1 : 0) * (sort.direction === "asc" ? 1 : -1);
   });
@@ -159,10 +220,12 @@ function renderExec() {
     rows
       .map(
         (x) =>
-          `<tr><td>${dt(x.executedAt || x.receivedAt)}</td><td>${dur(num(x.durationMs))}</td><td>${x.symbol || "-"}</td><td>${x.side}</td><td>${entryNames[num(x.entryType)] || "-"}</td><td>${x.dealTicket || "-"}</td><td>${num(x.volume).toFixed(2)}</td><td>${num(x.price).toFixed(5)}</td><td>${usd(x.profit)}</td><td>${usd(x.commission)}</td><td>${usd(x.swap)}</td><td>${usd(x.net)}</td><td>${x.magic || "-"}</td><td>${x.comment || "-"}</td></tr>`,
+          `<tr><td data-label="${translate("time")}">${dt(x.executedAt || x.receivedAt)}</td><td data-label="${translate("duration")}">${dur(num(x.durationMs))}</td><td data-label="${translate("symbol")}">${esc(x.symbol || "-")}</td><td data-label="${translate("direction")}">${esc(x.side)}</td><td data-label="Entry">${esc(entryNames[num(x.entryType)] || "-")}</td><td data-label="${translate("deal")}">${esc(x.dealTicket || "-")}</td><td data-label="Lot">${num(x.volume).toFixed(2)}</td><td data-label="${translate("price")}">${num(x.price).toFixed(5)}</td><td data-label="Gross">${usd(x.profit)}</td><td class="mobile-secondary" data-label="${translate("commission")}">${usd(x.commission)}</td><td class="mobile-secondary" data-label="Swap">${usd(x.swap)}</td><td data-label="Net"><b class="${x.net >= 0 ? "good" : "bad"}">${usd(x.net)}</b></td><td class="mobile-secondary" data-label="Magic">${esc(x.magic || "-")}</td><td class="mobile-secondary" data-label="${translate("comment")}">${esc(x.comment || "-")}</td></tr>`,
       )
-      .join("") || '<tr><td colspan="14">Belum ada eksekusi.</td></tr>';
-  $("#pageInfo").textContent = `${page} / ${pages} · ${all.length} data`;
+      .join("") ||
+    `<tr class="empty-row"><td colspan="14">${translate("noExecutions")}</td></tr>`;
+  $("#pageInfo").textContent =
+    `${page} / ${pages} · ${all.length} ${translate("data")}`;
   $("#prevPage").disabled = page <= 1;
   $("#nextPage").disabled = page >= pages;
 }
@@ -184,7 +247,7 @@ function render() {
   $("#meta").textContent =
     `${t.broker_company} · ${t.broker_server} · ${t.broker_login_masked}`;
   $("#status").innerHTML =
-    `<b>${m.connected ? "Realtime connected" : "Disconnected"}</b><span>Telemetry ${dt(t.received_at)}</span><span>MT5 ${m.connected ? "connected" : "offline"}</span><span>Algo ${m.autoTradingEnabled ? "ON" : "OFF"}</span><span>Bridge v${m.bridgeVersion || "-"}</span>`;
+    `<b>${m.connected ? "Realtime connected" : "Disconnected"}</b><span>Telemetry ${dt(t.received_at)}</span><span>MT5 ${m.connected ? "connected" : "offline"}</span><span>Algo ${m.autoTradingEnabled ? "ON" : "OFF"}</span><span>Bridge v${esc(m.bridgeVersion || "-")}</span>`;
   $("#metrics").innerHTML = [
     card("Balance", usd(m.balance)),
     card("Equity", usd(m.equity)),
@@ -195,27 +258,31 @@ function render() {
     ),
     card("Margin level", pct(m.marginLevel)),
     card("Free margin", usd(m.freeMargin)),
-    card("Posisi", m.openPositions || 0),
-    card("Pending", m.pendingOrders || 0),
+    card(bi("Positions", "Posisi"), m.openPositions || 0),
+    card(bi("Pending", "Pending"), m.pendingOrders || 0),
     card("Spread", `${num(m.spreadPoints)} pt`),
     card("Session", r.session),
     card("Risk", r.state),
     card("Lot multiplier", `${r.multiplier}×`),
   ].join("");
   $("#risk").innerHTML = [
-    card("Status risiko", r.state),
-    card("Entry baru", r.allow ? "Diizinkan" : "Diblokir"),
+    card(bi("Risk status", "Status risiko"), r.state),
+    card(
+      bi("New entries", "Entry baru"),
+      r.allow ? bi("Allowed", "Diizinkan") : bi("Blocked", "Diblokir"),
+    ),
     card("Daily drawdown", `${pct(r.daily)} / 3%`),
     card("Peak drawdown", `${pct(r.peakDd)} / 7%`),
     card("Floating loss", `${pct(r.floating)} / 2%`),
     card("Margin", `${pct(m.marginLevel)} / min 500%`),
-    card("Posisi", `${m.openPositions || 0} / max 3`),
+    card(bi("Positions", "Posisi"), `${m.openPositions || 0} / max 3`),
     card("Spread", `${num(m.spreadPoints)} / max 100 pt`),
   ].join("");
   $("#riskAlerts").innerHTML =
     r.alerts
       .map((x) => `<div class="risk-alert"><b>${x[1]}</b> · ${x[0]}</div>`)
-      .join("") || '<p class="muted">Tidak ada risiko aktif.</p>';
+      .join("") ||
+    `<p class="muted">${bi("No active risk alerts.", "Tidak ada risiko aktif.")}</p>`;
   $("#resume").innerHTML = [
     card("Closed trades", closed.length),
     card("Win rate", pct((wins.length / (closed.length || 1)) * 100)),
@@ -228,16 +295,18 @@ function render() {
     pos
       .map(
         (p) =>
-          `<tr><td>${dur(Date.now() - num(p.openedAtEpoch) * 1000)}</td><td>${p.symbol}</td><td>${p.side}</td><td>${p.ticket}</td><td>${num(p.volume).toFixed(2)}</td><td>${num(p.openPrice).toFixed(5)}</td><td>${num(p.currentPrice).toFixed(5)}</td><td>${num(p.sl).toFixed(5)}</td><td>${num(p.tp).toFixed(5)}</td><td>${usd(p.profit)}</td><td>${p.magic || "-"}</td><td>${p.comment || "-"}</td></tr>`,
+          `<tr><td>${dur(Date.now() - num(p.openedAtEpoch) * 1000)}</td><td>${esc(p.symbol)}</td><td>${esc(p.side)}</td><td>${esc(p.ticket)}</td><td>${num(p.volume).toFixed(2)}</td><td>${num(p.openPrice).toFixed(5)}</td><td>${num(p.currentPrice).toFixed(5)}</td><td>${num(p.sl).toFixed(5)}</td><td>${num(p.tp).toFixed(5)}</td><td>${usd(p.profit)}</td><td>${esc(p.magic || "-")}</td><td>${esc(p.comment || "-")}</td></tr>`,
       )
-      .join("") || '<tr><td colspan="12">Tidak ada posisi terbuka.</td></tr>';
+      .join("") ||
+    `<tr><td colspan="12">${bi("No open positions.", "Tidak ada posisi terbuka.")}</td></tr>`;
   $("#positionTotal").textContent =
     `${pos.length} posisi · ${usd(pos.reduce((a, x) => a + num(x.profit), 0))}`;
   if (!riskDraftDirty) {
     $("#maxLoss").value = num(data.control.max_loss_usd);
+    $("#lotSize").value = num(data.control.lot_size || 0.01);
     $("#riskPercent").value = num(data.control.risk_percent || 10);
     $("#riskFormula").textContent =
-      `Spread live ${num(m.spreadPoints).toFixed(1)} × 200 / risiko ${num(data.control.risk_percent || 10).toFixed(1)}% = Trailing Distance ${num(data.control.trailing_distance_points)} point. EA ${data.control.applied_at ? "sudah diterapkan" : "menunggu penerapan"}.`;
+      `Lot ${num(data.control.lot_size || 0.01).toFixed(2)} · live spread ${num(m.spreadPoints).toFixed(1)} × 200 / risk ${num(data.control.risk_percent || 10).toFixed(1)}% = Trailing Distance ${num(data.control.trailing_distance_points)} points. EA ${data.control.applied_at ? bi("applied", "sudah diterapkan") : bi("pending", "menunggu penerapan")}.`;
   }
   $("#controlStatus").textContent =
     `Baseline ${usd(data.control.baseline_equity)} · loss ${usd(Math.max(0, num(data.control.baseline_equity) - num(data.control.last_equity)))} · ${data.control.stop_trading ? "STOPPED" : "RUNNING"}`;
@@ -269,23 +338,29 @@ function render() {
   draw($("#equityChart"), hist, ["equity", "balance"], ["#50d890", "#55b9ff"]);
   $("#chartEmpty").hidden = Boolean(hasChart);
   $("#chartEmpty").textContent = hist.length
-    ? "Minimal dua titik diperlukan untuk menggambar grafik."
-    : "Belum ada telemetry pada rentang waktu ini.";
+    ? bi(
+        "At least two data points are required.",
+        "Minimal dua titik diperlukan untuk menggambar grafik.",
+      )
+    : bi(
+        "No telemetry in this time range.",
+        "Belum ada telemetry pada rentang waktu ini.",
+      );
   const eq = hist.map((x) => num(x.equity));
   $("#periodStats").innerHTML = [
-    card("Data point", hist.length),
-    card("Equity awal", usd(eq[0])),
-    card("Equity akhir", usd(eq.at(-1))),
-    card("Tertinggi", usd(Math.max(0, ...eq))),
-    card("Terendah", usd(eq.length ? Math.min(...eq) : 0)),
-    card("Perubahan", usd(num(eq.at(-1)) - num(eq[0]))),
+    card(bi("Data points", "Data point"), hist.length),
+    card(bi("Starting equity", "Equity awal"), usd(eq[0])),
+    card(bi("Ending equity", "Equity akhir"), usd(eq.at(-1))),
+    card(bi("Highest", "Tertinggi"), usd(Math.max(0, ...eq))),
+    card(bi("Lowest", "Terendah"), usd(eq.length ? Math.min(...eq) : 0)),
+    card(bi("Change", "Perubahan"), usd(num(eq.at(-1)) - num(eq[0]))),
   ].join("");
   const symbols = [
     ...new Set(data.executions.map((x) => x.symbol).filter(Boolean)),
   ];
   $("#filterSymbol").innerHTML =
-    '<option value="">Semua symbol</option>' +
-    symbols.map((x) => `<option>${x}</option>`).join("");
+    `<option value="">${translate("allSymbols")}</option>` +
+    symbols.map((x) => `<option>${esc(x)}</option>`).join("");
   renderExec();
   const alerts = [
     ...data.alerts,
@@ -295,50 +370,93 @@ function render() {
     alerts
       .map(
         (a) =>
-          `<div class="risk-alert"><b>${a.code}</b><div>${a.message}</div><small>${dt(a.created_at)}</small></div>`,
+          `<div class="risk-alert"><b>${esc(a.code)}</b><div>${esc(a.message)}</div><small>${dt(a.created_at)}</small></div>`,
       )
-      .join("") || '<p class="muted">Tidak ada notifikasi.</p>';
+      .join("") ||
+    `<p class="muted">${bi("No notifications.", "Tidak ada notifikasi.")}</p>`;
   $("#storage").innerHTML = [
     card("Telemetry rows", data.history.length),
     card("Execution rows", data.executions.length),
     card("Alert rows", data.alerts.length),
-    card("Retensi", "Sesuai paket"),
+    card(bi("Retention", "Retensi"), bi("According to plan", "Sesuai paket")),
   ].join("");
 }
 async function load() {
-  const next = await api(`/api/terminals/${id}/supervisor`);
-  if (
-    alertCount &&
-    next.alerts.length > alertCount &&
-    $("#soundAlerts").checked
-  ) {
-    const audio = new AudioContext();
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    oscillator.connect(gain);
-    gain.connect(audio.destination);
-    oscillator.frequency.value = 440;
-    gain.gain.value = 0.04;
-    oscillator.start();
-    oscillator.stop(audio.currentTime + 0.15);
-  }
-  alertCount = next.alerts.length;
-  data = next;
-  render();
+  if (loadInFlight) return;
+  loadInFlight = true;
   clearTimeout(timer);
-  timer = setTimeout(load, 2000);
+  try {
+    const next = await api(`/api/terminals/${id}/supervisor?historyLimit=300`);
+    next.history = Array.isArray(next.history) ? next.history : [];
+    next.executions = Array.isArray(next.executions) ? next.executions : [];
+    next.alerts = Array.isArray(next.alerts) ? next.alerts : [];
+    next.control = next.control || {};
+    next.telemetry = next.telemetry || {};
+    if (
+      alertCount &&
+      next.alerts.length > alertCount &&
+      $("#soundAlerts").checked
+    ) {
+      const audio = new AudioContext();
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.frequency.value = 440;
+      gain.gain.value = 0.04;
+      oscillator.start();
+      oscillator.stop(audio.currentTime + 0.15);
+    }
+    alertCount = next.alerts.length;
+    data = next;
+    render();
+    $("#status").classList.remove("load-error");
+  } catch (error) {
+    if (error.silent) return;
+    console.error("Terminal refresh failed", error);
+    $("#status").textContent =
+      `${bi("Unable to refresh data", "Gagal memperbarui data")}: ${error.message}. ${bi("Retrying…", "Mencoba kembali…")}`;
+    $("#status").classList.add("load-error");
+  } finally {
+    loadInFlight = false;
+    timer = setTimeout(load, document.hidden ? 10000 : 2000);
+  }
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) load();
+});
 async function control(action) {
-  await api(`/api/terminals/${id}/control`, {
-    method: "POST",
-    body: JSON.stringify({
-      action,
-      maxLossUsd: num($("#maxLoss").value),
-      riskPercent: num($("#riskPercent").value || 10),
-    }),
-  });
-  if (action === "save-limit") riskDraftDirty = false;
-  await load();
+  if (action === "save-limit") {
+    const inputs = [$("#maxLoss"), $("#lotSize"), $("#riskPercent")];
+    if (!inputs.every((input) => input.reportValidity())) return;
+  }
+  const buttons = [
+    $("#saveLimit"),
+    $("#closeAll"),
+    $("#stopTrade"),
+    $("#resumeTrade"),
+  ];
+  buttons.forEach((button) => (button.disabled = true));
+  $("#controlStatus").textContent = translate("saving");
+  try {
+    await api(`/api/terminals/${id}/control`, {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        maxLossUsd: num($("#maxLoss").value),
+        lotSize: num($("#lotSize").value || 0.01),
+        riskPercent: num($("#riskPercent").value || 10),
+      }),
+    });
+    if (action === "save-limit") riskDraftDirty = false;
+    $("#controlStatus").textContent = translate("saveSuccess");
+    await load();
+  } catch (error) {
+    $("#controlStatus").textContent = `Gagal menyimpan: ${error.message}`;
+  } finally {
+    buttons.forEach((button) => (button.disabled = false));
+  }
 }
 $("#saveLimit").onclick = () => control("save-limit");
 function updateRiskDraft() {
@@ -354,10 +472,11 @@ function updateRiskDraft() {
     Math.ceil((spread * 200) / riskPercent),
   );
   $("#riskFormula").textContent =
-    `Preview: spread live ${spread.toFixed(1)} × 200 / risiko ${riskPercent.toFixed(1)}% = Trailing Distance ${distance} point. Klik Simpan untuk menerapkan.`;
+    `Preview: lot ${num($("#lotSize").value || 0.01).toFixed(2)} · spread ${spread.toFixed(1)} × 200 / risiko ${riskPercent.toFixed(1)}% = Trailing Distance ${distance} point. Klik Simpan untuk menerapkan.`;
 }
 $("#riskPercent").oninput = updateRiskDraft;
 $("#maxLoss").oninput = updateRiskDraft;
+$("#lotSize").oninput = updateRiskDraft;
 $("#closeAll").onclick = () =>
   confirm("Tutup semua posisi terminal ini?") && control("close-all");
 $("#stopTrade").onclick = () => control("stop");
@@ -378,6 +497,17 @@ $("#mainChart").onwheel = (e) => {
   zoom = Math.min(20, Math.max(1, zoom * (e.deltaY < 0 ? 1.5 : 0.75)));
   render();
 };
+let resizeTimer;
+if ("ResizeObserver" in window)
+  new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => data && render(), 120);
+  }).observe($("#mainChart").parentElement);
+else
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => data && render(), 150);
+  });
 $("#metricButtons").onclick = (e) => {
   if (e.target.dataset.metric) {
     metric = e.target.dataset.metric;
@@ -411,7 +541,12 @@ $("#nextPage").onclick = () => {
   renderExec();
 };
 $("#exportCsv").onclick = () => {
-  const rows = filteredExecutions(),
+  const csvCell = (value) => {
+      let safe = String(value ?? "");
+      if (/^[=+\-@]/.test(safe)) safe = `'${safe}`;
+      return `"${safe.replaceAll('"', '""')}"`;
+    },
+    rows = filteredExecutions(),
     csv = [
       "executedAt,symbol,side,entry,deal,volume,price,profit,commission,swap,net,magic,comment",
       ...rows.map((x) =>
@@ -429,24 +564,32 @@ $("#exportCsv").onclick = () => {
           x.net,
           x.magic,
           JSON.stringify(x.comment || ""),
-        ].join(","),
+        ]
+          .map(csvCell)
+          .join(","),
       ),
     ].join("\n"),
     a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  a.download = `cloudtrade-${id}.csv`;
+  const url = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  a.href = url;
+  a.download = `tradecloud-${id}.csv`;
   a.click();
+  URL.revokeObjectURL(url);
 };
-api("/api/terminals").then((x) => {
-  $("#terminalSelect").innerHTML = x.terminals
-    .map(
-      (t) =>
-        `<option value="${t.id}" ${t.id === id ? "selected" : ""}>${t.name}</option>`,
-    )
-    .join("");
-});
+api("/api/terminals")
+  .then((x) => {
+    $("#terminalSelect").innerHTML = x.terminals
+      .map(
+        (t) =>
+          `<option value="${esc(t.id)}" ${t.id === id ? "selected" : ""}>${esc(t.name)}</option>`,
+      )
+      .join("");
+  })
+  .catch((error) => {
+    $("#status").textContent = `Gagal memuat daftar terminal: ${error.message}`;
+  });
 $("#terminalSelect").onchange = (e) =>
   (location.href = `/terminal/${e.target.value}`);
-load().catch((e) => {
-  $("#status").textContent = e.message;
-});
+load();

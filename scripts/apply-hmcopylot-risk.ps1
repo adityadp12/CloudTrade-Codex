@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory=$true)][string]$TenantRoot,
   [Parameter(Mandatory=$true)][string]$PythonExe,
   [Parameter(Mandatory=$true)][double]$MaxLossUsd,
+  [Parameter(Mandatory=$true)][ValidateRange(0.01,100)][double]$LotSize,
   [Parameter(Mandatory=$true)][int]$TrailingDistancePoints
 )
 $ErrorActionPreference = 'Stop'
@@ -22,7 +23,9 @@ $unicode = [Text.Encoding]::Unicode
 $text = [IO.File]::ReadAllText($chart, $unicode)
 if ($text -notmatch '(?m)^name=HMCopyLot\r?$') { throw 'HMCopyLot chart was not found' }
 $loss = $MaxLossUsd.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
+$lot = $LotSize.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
 $text = if ($text -match '(?m)^InpMaxLoss=.*\r?$') { [regex]::Replace($text,'(?m)^InpMaxLoss=.*\r?$',"InpMaxLoss=$loss`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpMaxLoss=$loss" }
+$text = if ($text -match '(?m)^InpLot=.*\r?$') { [regex]::Replace($text,'(?m)^InpLot=.*\r?$',"InpLot=$lot`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpLot=$lot" }
 $text = if ($text -match '(?m)^InpTrailDist=.*\r?$') { [regex]::Replace($text,'(?m)^InpTrailDist=.*\r?$',"InpTrailDist=$TrailingDistancePoints`r") } else { $text -replace '(?m)^<inputs>\r?$',"<inputs>`r`nInpTrailDist=$TrailingDistancePoints" }
 [IO.File]::WriteAllText($chart, $text, $unicode)
 $env:CT_TERMINAL_EXE=$terminalExe
@@ -32,4 +35,4 @@ $last=$lines|Select-Object -Last 1
 try{$verification=$last|ConvertFrom-Json}catch{throw 'MT5 risk restart returned invalid response'}
 if($exit -ne 0 -or -not $verification.account_matches -or -not $verification.server_matches -or -not $verification.terminal_connected){throw 'MT5 risk restart verification failed'}
 $process=Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'"|Where-Object ExecutablePath -eq $terminalExe|Select-Object -First 1
-[pscustomobject]@{success=$true;installPath=$root;processId=$process.ProcessId;maxLossUsd=$MaxLossUsd;trailingDistancePoints=$TrailingDistancePoints}|ConvertTo-Json -Compress
+[pscustomobject]@{success=$true;installPath=$root;processId=$process.ProcessId;maxLossUsd=$MaxLossUsd;lotSize=$LotSize;trailingDistancePoints=$TrailingDistancePoints}|ConvertTo-Json -Compress

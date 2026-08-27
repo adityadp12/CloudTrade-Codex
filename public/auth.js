@@ -1,7 +1,7 @@
 const $ = (s) => document.querySelector(s),
   register = location.pathname === "/register";
 if (register) {
-  $("#authTitle").textContent = "Buat akun CloudTrade";
+  $("#authTitle").textContent = "Buat akun TradeCloud";
   $("#nameLabel").hidden = false;
   $("#displayName").required = true;
   $("#authSwitch").innerHTML = 'Sudah punya akun? <a href="/login">Masuk</a>';

@@ -1,0 +1,15 @@
+tradecloud.asia {
+	encode zstd gzip
+	reverse_proxy 192.168.0.130:8090
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	log {
+		output file D:\logs\cloudtrade-access.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+	}
+}

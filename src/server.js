@@ -13,8 +13,73 @@ import { issueSession, requireAuth } from "./auth.js";
 
 const app = express();
 const runFile = promisify(execFile);
+app.disable("x-powered-by");
+// Caddy runs on this host and connects through the server's fixed LAN address.
+// Trust only that hop so req.ip and secure cookies cannot be spoofed by clients.
+app.set("trust proxy", (ip) =>
+  ["127.0.0.1", "::1", "::ffff:127.0.0.1", "192.168.0.130", "::ffff:192.168.0.130"].includes(ip),
+);
+app.use((_req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy":
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  });
+  next();
+});
 app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  next();
+});
+app.param("id", (req, res, next, value) =>
+  z.string().uuid().safeParse(value).success
+    ? next()
+    : res.status(400).json({ error: "invalid_id" }),
+);
+const rateBuckets = new Map();
+function rateLimit({ windowMs, max }) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${req.ip}:${req.path}`;
+    const bucket = rateBuckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      res.set("Retry-After", String(Math.ceil((bucket.resetAt - now) / 1000)));
+      return res.status(429).json({ error: "too_many_requests" });
+    }
+    next();
+  };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of rateBuckets)
+    if (value.resetAt <= now) rateBuckets.delete(key);
+}, 60_000).unref();
+const requireSameOrigin = (req, res, next) => {
+  if (!req.cookies.cloudtrade_session) return next();
+  const origin = req.get("origin");
+  if (!origin) return next();
+  try {
+    if (new URL(origin).host === req.get("host")) return next();
+  } catch {}
+  return res.status(403).json({ error: "invalid_origin" });
+};
+app.use("/api/auth", rateLimit({ windowMs: 15 * 60_000, max: 20 }));
+app.use("/api/v1", rateLimit({ windowMs: 60_000, max: 180 }));
+app.use("/api", (req, res, next) =>
+  ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
+    ? requireSameOrigin(req, res, next)
+    : next(),
+);
 app.use(express.static(path.resolve("public")));
 app.get(["/login", "/register"], (_req, res) =>
   res.sendFile(path.resolve("public/login.html")),
@@ -28,7 +93,7 @@ app.get("/terminal/:id", (_req, res) =>
 
 app.get("/health", async (_req, res) => {
   await query("SELECT 1");
-  res.json({ ok: true, service: "cloudtrade-api" });
+  res.json({ ok: true, service: "tradecloud-api" });
 });
 
 async function telemetryIdentity(req) {
@@ -50,6 +115,20 @@ app.post("/api/v1/telemetry", async (req, res) => {
   );
   if (!credential.rows[0])
     return res.status(401).json({ error: "unauthorized" });
+  const payload = z
+    .object({
+      terminalId: z.string().regex(/^ct-[a-f0-9-]{36}$/),
+      connected: z.boolean(),
+      symbol: z.string().max(40).optional(),
+      equity: z.number().finite().min(0).max(1e12).optional(),
+      marginLevel: z.number().finite().min(0).max(1e9).optional(),
+      autoTradingEnabled: z.boolean().optional(),
+    })
+    .passthrough()
+    .safeParse(req.body);
+  if (!payload.success)
+    return res.status(400).json({ error: "invalid_telemetry" });
+  req.body = payload.data;
   const terminal = await query(
     "SELECT terminal_key FROM terminals WHERE id=$1",
     [credential.rows[0].terminal_id],
@@ -121,6 +200,17 @@ app.post("/api/v1/telemetry", async (req, res) => {
 app.post("/api/v1/trade-event", async (req, res) => {
   const identity = await telemetryIdentity(req);
   if (!identity) return res.status(401).json({ error: "unauthorized" });
+  const payload = z
+    .object({
+      terminalId: z.string().regex(/^ct-[a-f0-9-]{36}$/),
+      dealTicket: z.union([z.string(), z.number()]).transform(String),
+      executedAt: z.string().datetime({ offset: true }).optional(),
+    })
+    .passthrough()
+    .safeParse(req.body);
+  if (!payload.success)
+    return res.status(400).json({ error: "invalid_trade_event" });
+  req.body = payload.data;
   if (req.body.terminalId !== identity.terminal_key)
     return res.status(403).json({ error: "terminal_identity_mismatch" });
   const ticket = String(req.body.dealTicket ?? "");
@@ -138,12 +228,13 @@ app.get("/api/v1/control", async (req, res) => {
   if (req.query.terminalId !== identity.terminal_key)
     return res.status(403).json({ error: "terminal_identity_mismatch" });
   const result = await query(
-    "SELECT max_loss_usd,baseline_equity,last_equity,stop_trading,close_all_generation,risk_percent,trailing_distance_points,applied_at,reason,updated_at FROM terminal_controls WHERE terminal_id=$1",
+    "SELECT max_loss_usd,lot_size,baseline_equity,last_equity,stop_trading,close_all_generation,risk_percent,trailing_distance_points,applied_at,reason,updated_at FROM terminal_controls WHERE terminal_id=$1",
     [identity.terminal_id],
   );
   const value = result.rows[0] ?? {};
   res.json({
     maxLossUsd: Number(value.max_loss_usd ?? 0),
+    lotSize: Number(value.lot_size ?? 0.01),
     baselineEquity: Number(value.baseline_equity ?? 0),
     currentLossUsd: Math.max(
       0,
@@ -177,6 +268,11 @@ app.post("/api/auth/register", async (req, res) => {
       const plan = await client.query(
         "SELECT id FROM plans WHERE code='starter'",
       );
+      if (!plan.rows[0]) {
+        const error = new Error("Required Starter plan is unavailable");
+        error.code = "SYSTEM_PLAN_MISSING";
+        throw error;
+      }
       await client.query(
         "INSERT INTO subscriptions(user_id,plan_id,status,current_period_end) VALUES($1,$2,'trialing',now()+interval '14 days')",
         [inserted.rows[0].id, plan.rows[0].id],
@@ -193,6 +289,10 @@ app.post("/api/auth/register", async (req, res) => {
   } catch (error) {
     if (error.code === "23505")
       return res.status(409).json({ error: "email_exists" });
+    if (error.code === "SYSTEM_PLAN_MISSING") {
+      console.error(error.message);
+      return res.status(503).json({ error: "service_unavailable" });
+    }
     throw error;
   }
 });
@@ -207,11 +307,13 @@ app.post("/api/auth/login", async (req, res) => {
     [parsed.data.email],
   );
   const user = result.rows[0];
-  if (
-    !user ||
-    user.status !== "active" ||
-    !(await bcrypt.compare(parsed.data.password, user.password_hash))
-  )
+  const fallbackHash =
+    "$2b$12$Jq9wX3bV2pQx1xPgH/Q78uQG0KDaAFbfZfGw/6g6BcQvpE7TJVrjK";
+  const passwordMatches = await bcrypt.compare(
+    parsed.data.password,
+    user?.password_hash ?? fallbackHash,
+  );
+  if (!user || user.status !== "active" || !passwordMatches)
     return res.status(401).json({ error: "invalid_credentials" });
   res.cookie("cloudtrade_session", issueSession(user), {
     httpOnly: true,
@@ -224,7 +326,11 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/logout", (_req, res) => {
-  res.clearCookie("cloudtrade_session");
+  res.clearCookie("cloudtrade_session", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: config.cookieSecure,
+  });
   res.status(204).end();
 });
 
@@ -245,7 +351,7 @@ app.get("/api/plans", async (_req, res) => {
 
 app.get("/api/terminals", requireAuth, async (req, res) => {
   const result = await query(
-    "SELECT t.id,t.name,t.terminal_key,t.broker_company,t.broker_server,t.broker_login_masked,t.worker_id,t.desired_state,t.runtime_state,t.provisioning_stage,t.process_id,t.last_heartbeat_at,t.last_error_code,t.last_error_message,t.configuration,t.created_at,tl.connected AS telemetry_connected,tl.symbol AS telemetry_symbol,tl.received_at AS telemetry_received_at,tl.payload AS telemetry FROM terminals t LEFT JOIN terminal_telemetry_latest tl ON tl.terminal_id=t.id WHERE t.user_id=$1 ORDER BY t.created_at DESC",
+    "SELECT t.id,t.name,t.terminal_key,t.broker_company,t.broker_server,t.broker_login_masked,t.worker_id,t.desired_state,t.runtime_state,t.provisioning_stage,t.process_id,t.last_heartbeat_at,t.last_error_code,t.last_error_message,t.configuration,t.created_at,(coalesce(tl.connected,false) AND tl.received_at>now()-interval '30 seconds') AS telemetry_connected,tl.symbol AS telemetry_symbol,tl.received_at AS telemetry_received_at,tl.payload AS telemetry FROM terminals t LEFT JOIN terminal_telemetry_latest tl ON tl.terminal_id=t.id WHERE t.user_id=$1 ORDER BY t.created_at DESC",
     [req.user.id],
   );
   res.json({ terminals: result.rows });
@@ -345,6 +451,13 @@ app.get("/api/jobs/:id/logs", requireAuth, async (req, res) => {
 });
 
 app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
+  const historyLimit = Math.min(
+    1000,
+    Math.max(
+      100,
+      Number.parseInt(String(req.query.historyLimit ?? "600"), 10) || 600,
+    ),
+  );
   const owned = await query(
     "SELECT t.id,t.name,t.terminal_key,t.broker_company,t.broker_server,t.broker_login_masked,t.runtime_state,t.last_heartbeat_at,tl.payload,tl.received_at FROM terminals t LEFT JOIN terminal_telemetry_latest tl ON tl.terminal_id=t.id WHERE t.id=$1 AND t.user_id=$2",
     [req.params.id, req.user.id],
@@ -353,8 +466,8 @@ app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
     return res.status(404).json({ error: "terminal_not_found" });
   const [history, executions, alerts, control] = await Promise.all([
     query(
-      "SELECT payload,received_at FROM terminal_telemetry_history WHERE terminal_id=$1 AND received_at>now()-interval '30 days' ORDER BY received_at DESC LIMIT 2500",
-      [req.params.id],
+      "SELECT payload,received_at FROM terminal_telemetry_history WHERE terminal_id=$1 AND received_at>now()-interval '30 days' ORDER BY received_at DESC LIMIT $2",
+      [req.params.id, historyLimit],
     ),
     query(
       "SELECT payload,executed_at,received_at FROM terminal_trade_events WHERE terminal_id=$1 ORDER BY coalesce(executed_at,received_at) DESC LIMIT 1000",
@@ -365,7 +478,7 @@ app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
       [req.params.id],
     ),
     query(
-      "SELECT max_loss_usd,baseline_equity,last_equity,stop_trading,close_all_generation,risk_percent,trailing_distance_points,applied_at,reason,updated_at FROM terminal_controls WHERE terminal_id=$1",
+      "SELECT max_loss_usd,lot_size,baseline_equity,last_equity,stop_trading,close_all_generation,risk_percent,trailing_distance_points,applied_at,reason,updated_at FROM terminal_controls WHERE terminal_id=$1",
       [req.params.id],
     ),
   ]);
@@ -383,6 +496,7 @@ app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
     alerts: alerts.rows,
     control: control.rows[0] ?? {
       max_loss_usd: 0,
+      lot_size: 0.01,
       risk_percent: 10,
       trailing_distance_points: 0,
       stop_trading: false,
@@ -396,6 +510,7 @@ app.post("/api/terminals/:id/control", requireAuth, async (req, res) => {
     .object({
       action: z.enum(["save-limit", "close-all", "stop", "resume"]),
       maxLossUsd: z.number().nonnegative().optional(),
+      lotSize: z.number().min(0.01).max(100).multipleOf(0.01).optional(),
       riskPercent: z.number().positive().max(100).optional(),
     })
     .safeParse(req.body);
@@ -420,13 +535,14 @@ app.post("/api/terminals/:id/control", requireAuth, async (req, res) => {
       Math.max(Math.ceil(spread * 2), Math.ceil((spread * 200) / riskPercent)),
     );
     await query(
-      "UPDATE terminal_controls SET max_loss_usd=$2,risk_percent=$3,trailing_distance_points=$4,baseline_equity=$5,last_equity=$5,reason='',applied_at=null,updated_at=now() WHERE terminal_id=$1",
+      "UPDATE terminal_controls SET max_loss_usd=$2,risk_percent=$3,trailing_distance_points=$4,baseline_equity=$5,last_equity=$5,lot_size=$6,reason='',applied_at=null,updated_at=now() WHERE terminal_id=$1",
       [
         req.params.id,
         parsed.data.maxLossUsd ?? 0,
         riskPercent,
         trailingDistance,
         owned.rows[0].equity,
+        parsed.data.lotSize ?? 0.01,
       ],
     );
     await query(
@@ -523,12 +639,16 @@ app.delete("/api/terminals/:id", requireAuth, async (req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
+  if (error?.type === "entity.parse.failed")
+    return res.status(400).json({ error: "invalid_json" });
   console.error(error);
   res.status(500).json({ error: "internal_error" });
 });
 
 if (process.env.NODE_ENV !== "test")
-  app.listen(config.port, "0.0.0.0", () =>
-    console.log(`CloudTrade API listening on http://0.0.0.0:${config.port}`),
+  app.listen(config.port, config.host, () =>
+    console.log(
+      `TradeCloud API listening on http://${config.host}:${config.port}`,
+    ),
   );
 export default app;

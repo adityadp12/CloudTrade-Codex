@@ -1,28 +1,32 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dashboard — CloudTrade</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-2" />
+    <title>Dashboard — TradeCloud</title>
+    <link rel="stylesheet" href="/styles.css?v=20260826-1" />
   </head>
   <body>
     <main class="shell">
       <header>
-        <a class="brand" href="/dashboard">Cloud<span>Trade</span></a>
-        <div>
+        <a class="brand" href="/dashboard">Trade<span>Cloud</span></a>
+        <div class="header-actions">
+          <select class="language-switcher" aria-label="Language">
+            <option value="en">EN</option>
+            <option value="id">ID</option>
+          </select>
           <span id="userName"></span>
-          <button id="logout" class="ghost">Keluar</button>
+          <button id="logout" class="ghost" data-i18n="logout">Sign out</button>
         </div>
       </header>
       <section class="app-layout">
         <aside class="sidebar">
           <div class="eyebrow">WORKSPACE</div>
           <nav>
-            <a class="nav-item" href="/dashboard">⌂ Dashboard</a
-            ><a class="nav-item" href="/terminals">▣ Terminal MT5</a
-            ><a class="nav-item" href="/activity">↻ Provisioning</a
-            ><a class="nav-item" href="/plans">◇ Paket</a>
+            <a class="nav-item" href="/dashboard">⌂ <span data-i18n="dashboardNav">Dashboard</span></a
+            ><a class="nav-item" href="/terminals">▣ <span data-i18n="terminalsNav">MT5 Terminals</span></a
+            ><a class="nav-item" href="/activity">↻ <span data-i18n="activityNav">Activity</span></a
+            ><a class="nav-item" href="/plans">◇ <span data-i18n="plansNav">Plans</span></a>
           </nav>
         </aside>
         <div class="app-content">
@@ -33,7 +37,7 @@
               <p id="pageSubtitle"></p>
             </div>
             <button id="newTerminal" class="primary">
-              + Generate terminal
+              <span data-i18n="generateTerminal">+ Generate terminal</span>
             </button>
           </div>
           <div id="stats" class="stats"></div>
@@ -44,13 +48,13 @@
     <dialog id="terminalDialog">
       <form id="terminalForm" method="dialog">
         <div class="dialog-head">
-          <h2>Hubungkan akun MT5</h2>
+          <h2 data-i18n="connectMt5">Connect an MT5 account</h2>
           <button class="icon" value="cancel">×</button>
         </div>
         <div class="form-grid">
-          <label>Nama terminal<input name="name" required /></label
-          ><label>Perusahaan broker<input name="company" required /></label
-          ><label>Server MT5<input name="server" required /></label
+          <label><span data-i18n="terminalName">Terminal name</span><input name="name" required /></label
+          ><label><span data-i18n="brokerCompany">Broker company</span><input name="company" required /></label
+          ><label><span data-i18n="mt5Server">MT5 server</span><input name="server" required /></label
           ><label
             >Login MT5<input name="login" inputmode="numeric" required /></label
           ><label class="full"
@@ -58,7 +62,7 @@
           /></label>
         </div>
         <p id="terminalMessage" class="message"></p>
-        <button class="primary full-button">Generate terminal</button>
+        <button class="primary full-button" data-i18n="generateTerminalButton">Generate terminal</button>
       </form>
     </dialog>
     <div id="loadingOverlay" class="loading-overlay" hidden>
@@ -66,6 +70,6 @@
         <span class="spinner"></span><b>Menjalankan workflow core…</b>
       </div>
     </div>
-    <script src="/dashboard.js?v=20260821-2" type="module"></script>
+    <script src="/dashboard.js?v=20260827-3" type="module"></script>
   </body>
 </html>
