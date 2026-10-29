@@ -6,6 +6,8 @@ node_modules/
 .env
 runtime/
 coverage/
+test-results/
+playwright-report/
 npm-debug.log*
 .delete-safety-test/
 D:/logs/

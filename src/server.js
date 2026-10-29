@@ -10,6 +10,8 @@ import { config } from "./config.js";
 import { query, transaction } from "./db.js";
 import { encryptSecret, newTelemetryToken, tokenHash } from "./crypto.js";
 import { issueSession, requireAuth } from "./auth.js";
+import { registerInsightsRoutes } from "./insights-routes.js";
+import { createMarketAi } from "./market-ai.js";
 
 const app = express();
 const runFile = promisify(execFile);
@@ -104,6 +106,18 @@ async function telemetryIdentity(req) {
     [tokenHash(token)],
   );
   return result.rows[0] ?? null;
+}
+
+export function normalizeTradeEventTime(payload) {
+  const epoch = Number(payload?.executedAtEpoch);
+  if (Number.isInteger(epoch) && epoch > 0) {
+    const date = new Date(epoch * 1000);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  if (typeof payload?.executedAt !== "string" || !payload.executedAt.trim())
+    return null;
+  const date = new Date(payload.executedAt);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 app.post("/api/v1/telemetry", async (req, res) => {
@@ -204,13 +218,17 @@ app.post("/api/v1/trade-event", async (req, res) => {
     .object({
       terminalId: z.string().regex(/^ct-[a-f0-9-]{36}$/),
       dealTicket: z.union([z.string(), z.number()]).transform(String),
-      executedAt: z.string().datetime({ offset: true }).optional(),
+      executedAt: z.string().optional(),
+      executedAtEpoch: z.number().int().positive().optional(),
     })
     .passthrough()
     .safeParse(req.body);
   if (!payload.success)
     return res.status(400).json({ error: "invalid_trade_event" });
-  req.body = payload.data;
+  const executedAt = normalizeTradeEventTime(payload.data);
+  if (!executedAt)
+    return res.status(400).json({ error: "invalid_trade_event_time" });
+  req.body = { ...payload.data, executedAt };
   if (req.body.terminalId !== identity.terminal_key)
     return res.status(403).json({ error: "terminal_identity_mismatch" });
   const ticket = String(req.body.dealTicket ?? "");
@@ -491,6 +509,7 @@ app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
     })),
     executions: executions.rows.map((x) => ({
       ...x.payload,
+      executedAt: x.executed_at ?? x.payload.executedAt ?? null,
       receivedAt: x.received_at,
     })),
     alerts: alerts.rows,
@@ -504,6 +523,8 @@ app.get("/api/terminals/:id/supervisor", requireAuth, async (req, res) => {
     },
   });
 });
+
+registerInsightsRoutes(app, { query, requireAuth, config, ai: createMarketAi(config) });
 
 app.post("/api/terminals/:id/control", requireAuth, async (req, res) => {
   const parsed = z

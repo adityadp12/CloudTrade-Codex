@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>MT5 Supervisor — TradeCloud</title>
-    <link rel="stylesheet" href="/styles.css?v=20260826-4" />
+    <link rel="stylesheet" href="/styles.css?v=20261029-1" />
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide terminal-page">
       <header>
         <a class="brand" href="/dashboard">Trade<span>Cloud</span></a>
         <div class="header-actions">
@@ -32,14 +32,44 @@
       </div>
       <div id="status" class="statusbar"></div>
       <div id="metrics" class="stats"></div>
-      <details class="panel section" open>
+      <details class="panel section">
         <summary><b data-i18n="riskDetails">Terminal risk details</b></summary>
         <div id="risk" class="stats"></div>
         <div id="riskAlerts" class="risk-alerts"></div>
       </details>
-      <section class="panel section">
-        <h2 data-i18n="tradingSummary">Trading summary</h2>
+      <details class="panel section">
+        <summary><b data-i18n="tradingSummary">Trading summary</b></summary>
         <div id="resume" class="stats"></div>
+      </details>
+      <section class="panel section insights" aria-labelledby="insightsTitle">
+        <div class="section-head">
+          <div><div class="eyebrow">MARKET INTELLIGENCE</div><h2 id="insightsTitle">Market & performance</h2></div>
+          <button id="refreshInsights" type="button">Refresh insights</button>
+        </div>
+        <div class="insight-tabs" role="tablist" aria-label="Market insights">
+          <button id="tabMarket" type="button" role="tab" aria-selected="true" aria-controls="panelMarket" data-insight-tab="Market">Price & volume</button>
+          <button id="tabEconomic" type="button" role="tab" aria-selected="false" aria-controls="panelEconomic" data-insight-tab="Economic" tabindex="-1">Economic calendar</button>
+          <button id="tabPnl" type="button" role="tab" aria-selected="false" aria-controls="panelPnl" data-insight-tab="Pnl" tabindex="-1">PNL calendar</button>
+        </div>
+        <div id="panelMarket" role="tabpanel" aria-labelledby="tabMarket">
+          <div class="controls insight-filters"><label id="marketSymbolLabel" for="marketSymbol">Symbol</label><select id="marketSymbol"><option value="">Chart symbols</option></select><button id="runMarketAi" type="button" disabled>Ask AI</button></div>
+          <p id="marketStatus" class="muted" role="status" aria-live="polite">Loading market data…</p>
+          <div id="marketCards" class="market-grid"></div>
+          <div id="marketAi" class="ai-analysis" aria-live="polite"></div>
+          <p id="marketMethod" class="muted insight-footnote"></p>
+        </div>
+        <div id="panelEconomic" role="tabpanel" aria-labelledby="tabEconomic" hidden>
+          <div class="controls insight-filters"><label for="economicCurrency" id="economicCurrencyLabel">Currency</label><select id="economicCurrency"><option value="">All currencies</option></select><label for="economicImpact" id="economicImpactLabel">Impact</label><select id="economicImpact"><option value="">All impact levels</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option><option value="Holiday">Holiday</option></select></div>
+          <p id="economicStatus" class="muted" role="status" aria-live="polite">Loading calendar…</p>
+          <div class="table-wrap"><table class="economic-table"><thead id="economicHead"></thead><tbody id="economicRows"></tbody></table></div>
+          <p id="economicSource" class="muted insight-footnote"></p>
+        </div>
+        <div id="panelPnl" role="tabpanel" aria-labelledby="tabPnl" hidden>
+          <div class="controls insight-filters"><label for="pnlMonth" id="pnlMonthLabel">Month</label><input id="pnlMonth" type="month" min="2000-01" max="2099-12" /><label for="pnlTimezone" id="pnlTimezoneLabel">Time zone</label><select id="pnlTimezone"><option value="Asia/Jakarta">WIB · Asia/Jakarta</option><option value="UTC">UTC</option><option value="America/New_York">New York</option><option value="Europe/London">London</option><option value="Asia/Tokyo">Tokyo</option></select></div>
+          <p id="pnlStatus" class="muted" role="status" aria-live="polite"></p>
+          <div id="pnlSummary" class="stats"></div><div id="pnlCalendar" class="pnl-calendar"></div>
+          <div id="pnlDayDetails" class="pnl-day-details" aria-live="polite"></div><p id="pnlCoverage" class="muted insight-footnote"></p>
+        </div>
       </section>
       <section class="panel section">
         <div class="section-head">
@@ -68,8 +98,8 @@
           </table>
         </div>
       </section>
-      <section class="panel section">
-        <h2 data-i18n="accountRiskControls">Account risk controls</h2>
+      <details class="panel section">
+        <summary><b data-i18n="accountRiskControls">Account risk controls</b></summary>
         <div class="controls">
           <input
             id="maxLoss"
@@ -98,7 +128,9 @@
         </div>
         <p id="controlStatus" class="muted"></p>
         <p id="riskFormula" class="muted"></p>
-      </section>
+      </details>
+      <details id="historyDetails" class="terminal-history">
+        <summary class="panel section compact-summary"><b data-i18n="historyChart">History chart</b></summary>
       <section class="panel section">
         <div class="section-head">
           <div>
@@ -141,6 +173,7 @@
           <div id="periodStats" class="stats"></div>
         </section>
       </div>
+      </details>
       <section class="panel section">
         <div class="section-head">
           <h2 data-i18n="executionHistory">Execution history</h2>
@@ -218,6 +251,6 @@
       </div>
     </main>
     <div id="toastbox" class="toastbox"></div>
-    <script src="/terminal.js?v=20260827-6" type="module"></script>
+    <script src="/terminal.js?v=20261029-1" type="module"></script>
   </body>
 </html>

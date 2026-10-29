@@ -48,6 +48,22 @@ TrailingDistance = max(2 * spreadPoints, ceil(spreadPoints * 200 / riskPercent))
 
 Risk percentage default adalah 10%. Dengan spread 10 point, risiko 10% menghasilkan 200 point dan risiko 20% menghasilkan 100 point.
 
+## Analisis pasar dan kalender di web
+
+Halaman `/terminal/:id` memiliki tab **Harga & volume**, **Kalender ekonomi**, dan **Kalender PNL**, dalam bahasa Indonesia/Inggris serta layout desktop/mobile.
+
+Detail terminal memakai kartu metrik ringkas, tinggi tabel yang dibatasi, dan panel risiko, ringkasan trading, kontrol akun, serta grafik yang dapat dibuka saat dibutuhkan. Kontrol akun tetap memerlukan tindakan eksplisit pengguna. Tabel lebar digulir di dalam panel agar halaman mobile tidak melebar.
+
+- Harga/volume dibaca dari terminal MT5 tenant yang sudah berjalan, melalui `scripts/market-snapshot.py` dan `PYTHON_EXE`. Reader tidak login ulang, mengirim order, menyalakan terminal, atau mengubah EA. PID dan path executable harus sesuai tenant. Jika terminal offline atau data lama/tidak lengkap, web menjelaskan status tersebut dan tidak mengarang sinyal.
+- Arah indikator BUY/SELL/WAIT menggunakan candle tertutup M15/H1, konfirmasi H4, rata-rata harga 10/30 candle, dan volume relatif terhadap 20 candle sebelumnya. Tick volume dibedakan dari real volume; DOM hanya ditampilkan bila broker menyediakannya. Data broker bukan volume seluruh pasar global. Ini konteks analisis, bukan prediksi probabilitas profit.
+- **Minta analisis AI** menjalankan `CODEX_COMMAND` dengan login CLI yang tersedia pada user server, sandbox read-only, direktori sementara kosong, output JSON terstruktur, dan batas waktu 90 detik. Hanya data pasar dan kalender yang dikirim, tanpa credential, identitas akun atau histori PNL. Hasil diberi waktu snapshot dan menjadi kedaluwarsa setelah 3 menit. AI dapat menurunkan sinyal ke WAIT, tetapi tidak membalik arah atau melewati pemeriksaan data. Kegagalan AI tidak menghilangkan analisis indikator. Pada Windows gunakan native `codex.exe` atau shim npm standar `codex.cmd`.
+- Kalender ekonomi mengambil jadwal minggu ini dari `https://nfs.faireconomy.media/ff_calendar_thisweek.json`, cache 15 menit, dengan filter mata uang/dampak dan waktu WIB. Nilai actual yang tidak disediakan tetap kosong. Feed gagal/lama ditandai; jangan menganggapnya berarti tidak ada berita. Kalender ini bukan feed actual real-time yang dijamin.
+- PNL bulanan memakai seluruh deal tercatat pada bulan/zona waktu pilihan, bukan 1.000 baris terakhir tabel histori. Net mencakup profit, komisi, swap, dan fee termasuk biaya entry. Deposit/penarikan dan floating PNL tidak dihitung. Jumlah penutupan dan win rate dihitung per closing deal, bukan per posisi. Klik tanggal untuk rincian. Kalender hanya mencakup deal yang sudah diterima TradeCloud; belum ada backfill histori broker otomatis.
+
+API memerlukan session login dan memeriksa kepemilikan terminal: `GET /api/terminals/:id/market`, `GET /api/economic-calendar`, `GET /api/terminals/:id/pnl-calendar?month=2026-10&timeZone=Asia/Jakarta`, serta `POST`/`GET /api/terminals/:id/market-ai`. Tidak ada migration baru dan tidak ada perubahan eksekusi trading.
+
+Validasi: `npm test` untuk analisis/API, `npm run test:web` untuk browser Chrome desktop/mobile (Chrome lokal harus terpasang). Test browser memakai fixture terisolasi dan tidak menjalankan terminal atau order nyata.
+
 ## Keamanan
 
 - Password broker tidak dikembalikan oleh API.

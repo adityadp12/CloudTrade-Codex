@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": { "type": "string" },
+    "symbols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "symbol": { "type": "string" },
+          "direction": { "type": "string", "enum": ["BUY", "SELL", "WAIT"] },
+          "reason": { "type": "string" },
+          "invalidation": { "type": "string" },
+          "newsContext": { "type": "string" }
+        },
+        "required": [
+          "symbol",
+          "direction",
+          "reason",
+          "invalidation",
+          "newsContext"
+        ]
+      }
+    }
+  },
+  "required": ["summary", "symbols"]
+}

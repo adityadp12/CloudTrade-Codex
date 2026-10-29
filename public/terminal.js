@@ -1,4 +1,5 @@
 import { applyLanguage, getLanguage, t as translate } from "./i18n.js";
+import { initInsights } from "./insights.js?v=20261029-1";
 
 applyLanguage();
 const $ = (s) => document.querySelector(s),
@@ -392,6 +393,8 @@ async function load() {
     next.alerts = Array.isArray(next.alerts) ? next.alerts : [];
     next.control = next.control || {};
     next.telemetry = next.telemetry || {};
+    next.telemetry.connected = next.telemetry.connected === true &&
+      Date.now() - Date.parse(next.terminal?.received_at || "") <= 30_000;
     if (
       alertCount &&
       next.alerts.length > alertCount &&
@@ -593,3 +596,7 @@ api("/api/terminals")
 $("#terminalSelect").onchange = (e) =>
   (location.href = `/terminal/${e.target.value}`);
 load();
+$("#historyDetails").addEventListener("toggle", () => {
+  if (data && $("#historyDetails").open) requestAnimationFrame(render);
+});
+initInsights(id, { api, bi, esc, getLanguage });
