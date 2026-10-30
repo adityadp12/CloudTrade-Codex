@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { config } from "./config.js";
 import { pool, query, transaction } from "./db.js";
 import { decryptSecret } from "./crypto.js";
+import { runWorkerLoop } from "./worker-loop.js";
+import { codexExecutable } from "./codex-executable.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -86,20 +88,7 @@ async function runCodexRepair(job, failure, round) {
       process.cwd(),
       "-",
     ];
-    const command =
-      process.platform === "win32"
-        ? process.env.ComSpec || "cmd.exe"
-        : config.codexCommand;
-    const args =
-      process.platform === "win32"
-        ? [
-            "/d",
-            "/s",
-            "/c",
-            `call "${config.codexCommand}" ${codexArgs.map((value) => `"${value.replaceAll('"', '""')}"`).join(" ")}`,
-          ]
-        : codexArgs;
-    const child = spawn(command, args, {
+    const child = spawn(codexExecutable(config.codexCommand), codexArgs, {
       cwd: process.cwd(),
       windowsHide: true,
       env: Object.fromEntries(
@@ -382,7 +371,7 @@ async function provisionAndVerify(job, context) {
 
 function canAutoRepair(error) {
   const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
-  return !/credential|invalid account|authorization failed|account disabled|subscription|market closed/.test(
+  return !/credential|invalid account|authorization failed|account disabled|subscription|market closed|ipc timeout|code -10005/.test(
     text,
   );
 }
@@ -529,22 +518,12 @@ process.on("SIGINT", () => {
 console.log(
   `TradeCloud worker ${config.workerId} started; provisioning=${config.provisioningEnabled}`,
 );
-while (!stopping) {
-  const job = await claimJob();
-  if (!job) {
-    await wait(1500);
-    continue;
-  }
-  try {
-    await execute(job);
-  } catch (error) {
-    try {
-      await fail(job, error);
-    } catch (reportError) {
-      console.error(
-        `[core:${job.id}] failure could not be persisted: ${reportError.message}`,
-      );
-    }
-  }
-}
+await runWorkerLoop({
+  claimJob,
+  execute,
+  fail,
+  wait,
+  isStopping: () => stopping,
+  report: (event, details) => console.error(`[worker] ${event}`, details),
+});
 await pool.end();

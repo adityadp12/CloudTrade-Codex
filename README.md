@@ -34,6 +34,12 @@ Route frontend: `/`, `/login`, `/register`, `/dashboard`, `/terminals`, `/activi
 
 ## Lifecycle
 
+Worker harus berjalan terpisah dari API: `npm.cmd run worker`. Tanpa worker, job baru tetap berada di antrean. Pada Windows, jalankan `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-worker-autostart.ps1` untuk memasang task per-user yang menyalakan worker saat logon dan memeriksa prosesnya setiap menit. Starter tidak menggandakan worker yang sudah berjalan. Kegagalan membaca antrean saat database belum siap akan dicoba kembali dengan jeda bertahap, bukan mematikan worker.
+
+Provisioning mempertahankan executable tenant yang lebih baru daripada golden image. Jika koneksi Python belum siap setelah restart, worker mengirim login melalui dialog MT5 yang sebenarnya dan memverifikasi identitas akun, server, serta koneksi melalui SDK sebelum melanjutkan. Judul jendela tidak dipakai sebagai bukti autentikasi. Penemuan broker memilih perusahaan yang menyediakan server yang diminta, bukan sekadar nama merek yang mirip.
+
+Login awal memakai profile kosong agar chart bawaan tidak menahan inisialisasi pada akun dengan suffix simbol. Setelah discovery, Bridge dan HMCopyLot dimuat memakai nama simbol broker yang sebenarnya (misalnya `EURUSDc` dan `XAUUSDc`).
+
 `QUEUED -> CLONING -> AUTHENTICATING -> SYMBOL_DISCOVERY -> CONFIGURING_BRIDGE -> CONFIGURING_XAUUSD -> WEBREQUEST_ALLOWLIST -> TELEMETRY_VERIFY -> RUNNING`
 
 Setiap terminal mempunyai portable directory, credential terenkripsi, telemetry token, `InpTerminalId`, proses, chart, dan data tenant sendiri.

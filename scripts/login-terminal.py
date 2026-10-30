@@ -11,10 +11,11 @@ login = int(os.environ["CT_BROKER_LOGIN"])
 password = os.environ["CT_BROKER_PASSWORD"]
 server = os.environ["CT_BROKER_SERVER"]
 
-ok = mt5.initialize(str(terminal), login=login, password=password, server=server, timeout=60_000, portable=True)
+ok = mt5.initialize(str(terminal), login=login, password=password, server=server, timeout=20_000, portable=True)
 if not ok:
     code, message = mt5.last_error()
     print(json.dumps({"success": False, "stage": "AUTHENTICATING", "error_code": code, "message": message}))
+    mt5.shutdown()
     sys.exit(1)
 
 try:

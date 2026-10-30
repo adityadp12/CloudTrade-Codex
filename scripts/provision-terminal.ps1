@@ -9,6 +9,7 @@ param(
   [int]$TrailingDistancePoints=100
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'mt5-config.ps1')
 
 function Write-ProgressEvent([string]$Stage, [string]$Message, [string]$Level='info') {
   [pscustomobject]@{type='progress';stage=$Stage;message=$Message;level=$Level} | ConvertTo-Json -Compress
@@ -40,7 +41,23 @@ if ($tenantProcess) { $tenantProcess | ForEach-Object { Stop-Process -Id $_.Proc
 
 Write-ProgressEvent 'CLONING' 'Menyelaraskan golden image dan data MT5 tenant'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
-robocopy $GoldenImage $root /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NP | Out-Null
+$cloneArgs = @($GoldenImage, $root, '/E', '/COPY:DAT', '/DCOPY:DAT', '/R:1', '/W:1', '/XJ', '/NFL', '/NDL', '/NP')
+$keepNewer = @()
+foreach ($platformFile in @('terminal64.exe', 'metaeditor64.exe', 'metatester64.exe')) {
+  $sourceFile = Join-Path $GoldenImage $platformFile
+  $targetFile = Join-Path $root $platformFile
+  if ((Test-Path -LiteralPath $sourceFile) -and (Test-Path -LiteralPath $targetFile)) {
+    $sourceVersion = (Get-Item -LiteralPath $sourceFile).VersionInfo.FileVersion
+    $targetVersion = (Get-Item -LiteralPath $targetFile).VersionInfo.FileVersion
+    if ($sourceVersion -and $targetVersion -and ([version]$targetVersion -gt [version]$sourceVersion)) { $keepNewer += $platformFile }
+  }
+}
+if ($keepNewer.Count) {
+  $cloneArgs += '/XF'
+  $cloneArgs += $keepNewer
+  Write-ProgressEvent 'PLATFORM_VERSION' 'Mempertahankan platform tenant yang sudah diperbarui agar tidak turun versi ke golden image'
+}
+& robocopy @cloneArgs | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "Golden image copy failed: $LASTEXITCODE" }
 
 Write-ProgressEvent 'DISCOVERING_ACTIVE_DATA' 'Mencari data aktif melalui origin.txt yang cocok persis dengan instalasi sumber'
@@ -78,11 +95,7 @@ Write-ProgressEvent 'BRIDGE_BINARY' 'Binary Mt5CodexBridge canonical dipulihkan 
 # Every clone would otherwise contend for the same port and Python would end
 # with MT5 error -10005 (IPC timeout). CloudTrade does not use that listener.
 $assistant = Join-Path $root 'Config\assistant.ini'
-if (Test-Path $assistant) {
-  $assistantText = [IO.File]::ReadAllText($assistant, [Text.Encoding]::Unicode)
-  $assistantText = [regex]::Replace($assistantText, '(?m)^Enable=1$', 'Enable=0')
-  [IO.File]::WriteAllText($assistant, $assistantText, [Text.Encoding]::Unicode)
-}
+Disable-TenantMcp $assistant
 
 $unicode = [Text.Encoding]::Unicode
 $common = Join-Path $root 'Config\common.ini'
@@ -151,6 +164,13 @@ New-Item -ItemType Directory -Path $presetDir -Force | Out-Null
 $preset = Join-Path $presetDir 'Mt5CodexBridge.set'
 [IO.File]::WriteAllText($preset, "InpTerminalId=$TerminalKey`r`nInpToken=$env:CT_TELEMETRY_TOKEN`r`nInpEndpoint=$TelemetryEndpoint/api/v1/telemetry`r`n", $unicode)
 
+# Discover broker symbols before loading charts/experts. Loading EURUSD on an
+# account that only offers EURUSDc can block MT5 initialization for minutes.
+$setupProfile = Join-Path $root 'MQL5\Profiles\Charts\CloudTradeSetup'
+New-Item -ItemType Directory -Path $setupProfile -Force | Out-Null
+$text = [IO.File]::ReadAllText($common, $unicode)
+$text = Set-IniValue $text 'ProfileLast' 'CloudTradeSetup'
+[IO.File]::WriteAllText($common, $text, $unicode)
 Write-ProgressEvent 'AUTHENTICATING' 'Login langsung ke server broker dan memeriksa koneksi'
 $env:CT_TERMINAL_EXE = $terminalExe
 $loginLines = @(& $PythonExe (Join-Path $PSScriptRoot 'login-terminal.py'))
@@ -174,13 +194,14 @@ if ($loginExit -ne 0 -and $verification.error_code -eq -10005) {
   }
   Write-ProgressEvent 'SERVER_ADD' 'Server broker yang cocok sudah dipilih dan login dikirim' 'success'
   Start-Sleep -Seconds 5
-  $latestLog = Get-ChildItem (Join-Path $root 'Logs') -Filter '*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  $logText = if ($latestLog) { Get-Content $latestLog.FullName -Raw } else { '' }
-  if (-not $serverResult.already_connected -and $logText -notmatch '(?i)authorized|connected to') {
-    Write-ProgressEvent 'AUTHENTICATING' 'Server sudah ditambahkan tetapi akun belum terotorisasi' 'error'
-    throw 'Broker authentication could not be confirmed'
+  # A submitted UI login or cached window title is not proof of account
+  # identity/connectivity. Require an actual SDK response before proceeding.
+  $loginLines = @(& $PythonExe (Join-Path $PSScriptRoot 'login-terminal.py'))
+  $loginExit = $LASTEXITCODE
+  try { $verification = ($loginLines | Select-Object -Last 1) | ConvertFrom-Json } catch { throw 'Broker login verification returned an invalid response' }
+  if ($loginExit -ne 0 -or -not $verification.account_matches -or -not $verification.server_matches -or -not $verification.terminal_connected) {
+    throw 'Broker authentication could not be confirmed after native login'
   }
-  $verification = [pscustomobject]@{account_matches=$true;server_matches=$true;terminal_connected=$true;trade_allowed=$true;eurusd_symbol='EURUSD';xauusd_symbol='XAUUSD'}
   $fallbackUsed = $true
   Write-ProgressEvent 'AUTHENTICATING' 'Login melalui server yang ditambahkan berhasil' 'success'
 } elseif ($loginExit -ne 0) {
@@ -268,10 +289,35 @@ if ($tenantProcess) {
   }
   Start-Sleep -Seconds 3
 }
-$restartLines = @(& $PythonExe (Join-Path $PSScriptRoot 'login-terminal.py'))
-$restartExit = $LASTEXITCODE
-$restartOutput = $restartLines | Select-Object -Last 1
-try { $restartVerification = $restartOutput | ConvertFrom-Json } catch { throw 'Bridge restart verification returned an invalid response' }
+# Native server discovery can reveal broker suffixes after the initial chart
+# setup. Persist them while MT5 is stopped so shutdown cannot overwrite them.
+$text = [IO.File]::ReadAllText($common, $unicode)
+$text = Set-IniValue $text 'ProfileLast' 'Default'
+[IO.File]::WriteAllText($common, $text, $unicode)
+$text = [IO.File]::ReadAllText($chart1, $unicode)
+$text = [regex]::Replace($text, '(?m)^symbol=.*$', "symbol=$($verification.eurusd_symbol)", 1)
+[IO.File]::WriteAllText($chart1, $text, $unicode)
+$text = [IO.File]::ReadAllText($chart2, $unicode)
+$text = [regex]::Replace($text, '(?m)^symbol=.*$', "symbol=$($verification.xauusd_symbol)", 1)
+[IO.File]::WriteAllText($chart2, $text, $unicode)
+for ($restartAttempt = 1; $restartAttempt -le 3; $restartAttempt++) {
+  $restartLines = @(& $PythonExe (Join-Path $PSScriptRoot 'login-terminal.py'))
+  $restartExit = $LASTEXITCODE
+  $restartOutput = $restartLines | Select-Object -Last 1
+  try { $restartVerification = $restartOutput | ConvertFrom-Json } catch { throw 'Bridge restart verification returned an invalid response' }
+  if ($restartExit -eq 0) { break }
+  if ($restartVerification.error_code -ne -10005 -or $restartAttempt -eq 3) { break }
+  Write-ProgressEvent 'BRIDGE_RESTART' 'Koneksi API belum siap; memastikan akun login kembali setelah restart platform' 'warning'
+  $tenantProcess = Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'" | Where-Object { $_.ExecutablePath -eq $terminalExe } | Select-Object -First 1
+  if ($tenantProcess) {
+    $env:CT_TERMINAL_PID = [string]$tenantProcess.ProcessId
+    $nativeLines = @(& $PythonExe (Join-Path $PSScriptRoot 'add-server-login.py'))
+    $nativeExit = $LASTEXITCODE
+    try { $nativeResult = ($nativeLines | Select-Object -Last 1) | ConvertFrom-Json } catch { throw 'Restart login returned an invalid response' }
+    if ($nativeExit -ne 0 -or -not $nativeResult.success) { throw 'Native broker login after restart failed' }
+  }
+  Start-Sleep -Seconds 5
+}
 if ($restartExit -ne 0 -or -not $restartVerification.account_matches -or -not $restartVerification.server_matches -or -not $restartVerification.terminal_connected) {
   $restartCode = if ($null -ne $restartVerification.error_code) { [string]$restartVerification.error_code } else { [string]$restartExit }
   throw "Terminal restart after WebRequest setup failed (code $restartCode)"
